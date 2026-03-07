@@ -1,0 +1,1212 @@
+/**
+ * VARIANT — Application Shell
+ *
+ * The root React component. Hosts the simulation
+ * or the level selection screen.
+ *
+ * The terminal is always the primary view. Everything else
+ * (browser, email, network map) opens from terminal commands.
+ *
+ * What lenses are available is configured by the WorldSpec
+ * (level designer controls the player's toolset).
+ */
+
+import { useState, useCallback, useEffect, useRef, useReducer, useMemo } from 'react';
+import type { TerminalIO } from '../core/vm/types';
+import type { Simulation, SimulationState } from '../core/engine';
+import { createSimulation } from '../core/engine';
+import { createV86Backend } from '../core/vm/v86-backend';
+import { injectXtermCSS } from '../modules/terminal';
+import { DEMO_01 } from '../levels/demo-01';
+import type { WorldSpec } from '../core/world/types';
+import type { LevelPackage } from '../lib/marketplace/types';
+import { createMarketplaceStore } from '../lib/marketplace';
+import { LandingPage } from './pages/LandingPage';
+import { MarketplacePage } from './pages/MarketplacePage';
+import { SettingsPage } from './pages/SettingsPage';
+import type { LensInstance } from './lens/types';
+import { compositorReducer, createInitialState, generateLensId } from './lens/compositor-state';
+import { LensCompositor } from './lenses/LensCompositor';
+import { TerminalLens } from './lenses/TerminalLens';
+import { BrowserLens } from './lenses/BrowserLens';
+import type { BrowserResponse } from './lenses/BrowserLens';
+import { EmailLens } from './lenses/EmailLens';
+import type { EmailMessage } from './lenses/EmailLens';
+import { LogViewerLens } from './lenses/LogViewerLens';
+import type { LogEntry } from './lenses/LogViewerLens';
+import { FileManagerLens } from './lenses/FileManagerLens';
+import type { FileEntry } from './lenses/FileManagerLens';
+import { NetworkMapLens } from './lenses/NetworkMapLens';
+import type { NetworkNode, NetworkEdge, TrafficFlow } from './lenses/NetworkMapLens';
+import { ProcessViewerLens } from './lenses/ProcessViewerLens';
+import type { ProcessInfo } from './lenses/ProcessViewerLens';
+import { PacketCaptureLens } from './lenses/PacketCaptureLens';
+import type { CapturedPacket } from './lenses/PacketCaptureLens';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useNotifications } from './hooks/useNotifications';
+import { NotificationToast } from './components/NotificationToast';
+
+// ── App State Machine ──────────────────────────────────────────
+
+type AppState =
+    | { readonly screen: 'landing' }
+    | { readonly screen: 'menu' }
+    | { readonly screen: 'marketplace' }
+    | { readonly screen: 'level-editor' }
+    | { readonly screen: 'settings' }
+    | { readonly screen: 'booting'; readonly levelId: string; readonly levelPackage?: LevelPackage }
+    | { readonly screen: 'simulation'; readonly levelId: string; readonly levelPackage?: LevelPackage }
+    | { readonly screen: 'error'; readonly message: string };
+
+// ── App Component ──────────────────────────────────────────────
+
+export function App(): JSX.Element {
+    const [state, setState] = useState<AppState>({ screen: 'landing' });
+    const marketplaceStore = useMemo(() => createMarketplaceStore(), []);
+
+    const handleLaunch = useCallback(() => setState({ screen: 'menu' }), []);
+    const handleMarketplace = useCallback(() => setState({ screen: 'marketplace' }), []);
+    const handleCreate = useCallback(() => setState({ screen: 'level-editor' }), []);
+    const handleSettings = useCallback(() => setState({ screen: 'settings' }), []);
+    const handleBackToLanding = useCallback(() => setState({ screen: 'landing' }), []);
+
+    const handleLevelSelect = useCallback((levelId: string) => {
+        setState({ screen: 'booting', levelId });
+    }, []);
+
+    const handleBackToMenu = useCallback(() => {
+        setState({ screen: 'menu' });
+    }, []);
+
+    const handlePlayLevel = useCallback((pkg: LevelPackage) => {
+        setState({ screen: 'booting', levelId: pkg.id, levelPackage: pkg });
+    }, []);
+
+    const handleSaveToMarketplace = useCallback(() => {
+        setState({ screen: 'marketplace' });
+    }, []);
+
+    const handleError = useCallback((message: string) => {
+        setState({ screen: 'error', message });
+    }, []);
+
+    const worldSpecForSimulation = (s: { levelId: string; levelPackage?: LevelPackage }): WorldSpec =>
+        s.levelPackage?.worldSpec ?? DEMO_01;
+
+    switch (state.screen) {
+        case 'landing':
+            return (
+                <>
+                    <LandingNav onCreate={handleCreate} onSettings={handleSettings} />
+                    <LandingPage onLaunch={handleLaunch} onMarketplace={handleMarketplace} />
+                </>
+            );
+        case 'menu':
+            return (
+                <MenuScreen
+                    onSelectLevel={handleLevelSelect}
+                    onBackToLanding={handleBackToLanding}
+                    onSettings={handleSettings}
+                />
+            );
+        case 'marketplace':
+            return (
+                <>
+                    <MarketplaceNav onBack={handleBackToLanding} onSettings={handleSettings} />
+                    <MarketplacePage store={marketplaceStore} onPlayLevel={handlePlayLevel} />
+                </>
+            );
+        case 'level-editor':
+            return (
+                <LevelEditorPlaceholder
+                    onSave={handleSaveToMarketplace}
+                    onBack={handleBackToLanding}
+                    onSettings={handleSettings}
+                />
+            );
+        case 'settings':
+            return <SettingsPage onBack={handleBackToLanding} />;
+        case 'booting':
+        case 'simulation':
+            return (
+                <SimulationScreen
+                    worldSpec={worldSpecForSimulation(state)}
+                    levelId={state.levelId}
+                    onExit={handleBackToMenu}
+                    onError={handleError}
+                    onSettings={handleSettings}
+                />
+            );
+        case 'error':
+            return <ErrorScreen message={state.message} onBack={handleBackToMenu} />;
+    }
+}
+
+// ── Landing Nav (Create, Settings) ───────────────────────────────
+
+function LandingNav({
+    onCreate,
+    onSettings,
+}: {
+    readonly onCreate: () => void;
+    readonly onSettings: () => void;
+}): JSX.Element {
+    const barStyle: React.CSSProperties = {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '12px 16px',
+        background: 'rgba(10, 10, 10, 0.9)',
+        borderBottom: '1px solid #1a1a2e',
+        zIndex: 1000,
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    };
+    return (
+        <nav style={barStyle}>
+            <button type="button" onClick={onCreate} style={navBtnStyle}>Create</button>
+            <button type="button" onClick={onSettings} style={navBtnStyle}>Settings</button>
+        </nav>
+    );
+}
+
+// ── Marketplace Nav (Back, Settings) ─────────────────────────────
+
+function MarketplaceNav({
+    onBack,
+    onSettings,
+}: {
+    readonly onBack: () => void;
+    readonly onSettings: () => void;
+}): JSX.Element {
+    const barStyle: React.CSSProperties = {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '12px 16px',
+        background: '#0d0d0d',
+        borderBottom: '1px solid #1a1a2e',
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    };
+    return (
+        <nav style={barStyle}>
+            <button type="button" onClick={onBack} style={navBtnStyle}>Back</button>
+            <button type="button" onClick={onSettings} style={navBtnStyle}>Settings</button>
+        </nav>
+    );
+}
+
+// ── Level Editor Placeholder ────────────────────────────────────
+
+function LevelEditorPlaceholder({
+    onSave,
+    onBack,
+    onSettings,
+}: {
+    readonly onSave: () => void;
+    readonly onBack: () => void;
+    readonly onSettings: () => void;
+}): JSX.Element {
+    const containerStyle: React.CSSProperties = {
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        background: '#0a0a0a',
+        color: '#e0e0e0',
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    };
+    const barStyle: React.CSSProperties = {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '12px 16px',
+        borderBottom: '1px solid #1a1a2e',
+        background: '#0d0d0d',
+    };
+    const mainStyle: React.CSSProperties = {
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#666',
+        fontSize: '0.9rem',
+    };
+    return (
+        <div style={containerStyle}>
+            <nav style={barStyle}>
+                <button type="button" onClick={onBack} style={navBtnStyle}>Back</button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" onClick={onSave} style={{ ...navBtnStyle, color: '#00ff41' }}>Save to Marketplace</button>
+                    <button type="button" onClick={onSettings} style={navBtnStyle}>Settings</button>
+                </div>
+            </nav>
+            <main style={mainStyle}>
+                Level Editor — placeholder. Build levels here (editor UI coming next).
+            </main>
+        </div>
+    );
+}
+
+const navBtnStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: '1px solid #1a1a2e',
+    color: '#e0e0e0',
+    padding: '6px 14px',
+    fontFamily: 'inherit',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    borderRadius: '2px',
+};
+
+// ── Menu Screen ────────────────────────────────────────────────
+
+function MenuScreen({
+    onSelectLevel,
+    onBackToLanding,
+    onSettings,
+}: {
+    readonly onSelectLevel: (id: string) => void;
+    readonly onBackToLanding: () => void;
+    readonly onSettings: () => void;
+}): JSX.Element {
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100vh',
+            background: '#0a0a0a',
+            color: '#e0e0e0',
+            fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+            overflow: 'hidden',
+        }}>
+            <div style={{
+                position: 'absolute',
+                top: '16px',
+                left: '16px',
+                right: '16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                pointerEvents: 'none',
+            }}>
+                <div style={{ pointerEvents: 'auto' }}>
+                    <button type="button" onClick={onBackToLanding} style={navBtnStyle}>Back</button>
+                </div>
+                <div style={{ pointerEvents: 'auto' }}>
+                    <button type="button" onClick={onSettings} style={navBtnStyle}>Settings</button>
+                </div>
+            </div>
+            <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+                <h1 style={{
+                    fontSize: '4rem',
+                    fontWeight: 800,
+                    color: '#00ff41',
+                    margin: 0,
+                    letterSpacing: '-0.04em',
+                    textShadow: '0 0 30px rgba(0, 255, 65, 0.3)',
+                }}>
+                    VARIANT
+                </h1>
+                <p style={{
+                    fontSize: '0.85rem',
+                    color: '#444',
+                    marginTop: '0.5rem',
+                    letterSpacing: '0.15em',
+                    textTransform: 'uppercase',
+                }}>
+                    Security Simulation Engine
+                </p>
+            </div>
+
+            <div style={{
+                width: '460px',
+                border: '1px solid #1a1a2e',
+                borderRadius: '2px',
+                padding: '24px',
+                background: '#0d0d0d',
+                cursor: 'pointer',
+                transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+            }}
+                onClick={() => { onSelectLevel('demo-01'); }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#00ff4160';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(0, 255, 65, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#1a1a2e';
+                    e.currentTarget.style.boxShadow = 'none';
+                }}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ color: '#00ff41', fontSize: '0.75rem', fontWeight: 600 }}>LEVEL 01</span>
+                    <span style={{
+                        fontSize: '0.65rem',
+                        padding: '2px 8px',
+                        border: '1px solid #00ff4140',
+                        color: '#00ff41',
+                        borderRadius: '2px',
+                    }}>
+                        BEGINNER
+                    </span>
+                </div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#e0e0e0', margin: '0 0 8px 0' }}>
+                    The Leak
+                </h2>
+                <p style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.5, margin: '0 0 16px 0' }}>
+                    A company web server has an exposed backup directory. Find the admin credentials before the sysadmin rotates them.
+                </p>
+                <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: '#444' }}>
+                    <span>~5 min</span>
+                    <span>Single machine</span>
+                    <span>Enumeration</span>
+                </div>
+            </div>
+
+            <p style={{
+                position: 'absolute',
+                bottom: '16px',
+                right: '16px',
+                fontSize: '0.65rem',
+                color: '#222',
+            }}>
+                VARIANT v0.1.0 — Santh
+            </p>
+        </div>
+    );
+}
+
+// ── Simulation Screen ──────────────────────────────────────────
+
+function SimulationScreen({
+    worldSpec,
+    levelId: _levelId,
+    onExit,
+    onError: _onError,
+    onSettings,
+}: {
+    readonly worldSpec: WorldSpec;
+    readonly levelId: string;
+    readonly onExit: () => void;
+    readonly onError: (message: string) => void;
+    readonly onSettings: () => void;
+}): JSX.Element {
+    const simulationRef = useRef<Simulation | null>(null);
+    const [terminalIO, setTerminalIO] = useState<TerminalIO | null>(null);
+    const [simState, setSimState] = useState<SimulationState | null>(null);
+    const [bootMessage, setBootMessage] = useState<string>('Initializing v86 emulator...');
+
+    // ── Compositor state ────────────────────────────────────────
+    const [compositorState, dispatchCompositor] = useReducer(compositorReducer, undefined, createInitialState);
+
+    const { notifications, dismissNotification } = useNotifications();
+    const { registerShortcut } = useKeyboardShortcuts();
+
+    // ── Lens data refs (populated from event bus) ───────────────
+    const emailsRef = useRef<readonly EmailMessage[]>([]);
+    const logsRef = useRef<readonly LogEntry[]>([]);
+    const networkNodesRef = useRef<readonly NetworkNode[]>([]);
+    const networkEdgesRef = useRef<readonly NetworkEdge[]>([]);
+    const trafficFlowsRef = useRef<readonly TrafficFlow[]>([]);
+    const processesRef = useRef<readonly ProcessInfo[]>([]);
+    const packetsRef = useRef<readonly CapturedPacket[]>([]);
+    const [capturing, setCapturing] = useState(true);
+
+    // Subscribe to event bus for lens data
+    useEffect(() => {
+        const sim = simulationRef.current;
+        if (sim === null) return;
+
+        const unsubs: Array<() => void> = [];
+
+        unsubs.push(sim.events.onPrefix('custom:email-received', (event) => {
+            const msg = (event as { data: unknown }).data as EmailMessage;
+            emailsRef.current = [...emailsRef.current, msg];
+        }));
+
+        unsubs.push(sim.events.onPrefix('custom:email-sent', (event) => {
+            const msg = (event as { data: unknown }).data as EmailMessage;
+            emailsRef.current = [...emailsRef.current, msg];
+        }));
+
+        unsubs.push(sim.events.onPrefix('custom:log-entry', (event) => {
+            const entry = (event as { data: unknown }).data as LogEntry;
+            logsRef.current = [...logsRef.current.slice(-9999), entry];
+        }));
+
+        unsubs.push(sim.events.onPrefix('custom:network-topology', (event) => {
+            const topo = (event as { data: unknown }).data as {
+                nodes: readonly NetworkNode[];
+                edges: readonly NetworkEdge[];
+            };
+            networkNodesRef.current = topo.nodes;
+            networkEdgesRef.current = topo.edges;
+        }));
+
+        unsubs.push(sim.events.onPrefix('custom:traffic-flow', (event) => {
+            const flow = (event as { data: unknown }).data as TrafficFlow;
+            // Keep last 200 flows for animation
+            trafficFlowsRef.current = [...trafficFlowsRef.current.slice(-199), flow];
+        }));
+
+        unsubs.push(sim.events.onPrefix('custom:process-list', (event) => {
+            const procs = (event as { data: unknown }).data as readonly ProcessInfo[];
+            processesRef.current = procs;
+        }));
+
+        // Tap fabric for packet capture
+        unsubs.push(sim.events.onPrefix('custom:packet-captured', (event) => {
+            const pkt = (event as { data: unknown }).data as CapturedPacket;
+            packetsRef.current = [...packetsRef.current.slice(-9999), pkt];
+        }));
+
+        return () => { unsubs.forEach(fn => { fn(); }); };
+    }, [terminalIO]); // re-subscribe when terminal is ready (sim is booted)
+
+    // ── Email handlers ──────────────────────────────────────────
+    const handleEmailSend = useCallback((to: string, subject: string, body: string) => {
+        const sim = simulationRef.current;
+        if (sim === null) return;
+
+        const sent: EmailMessage = {
+            id: `email-${Date.now()}`,
+            from: 'operator@variant.local',
+            to,
+            subject,
+            body,
+            date: new Date().toISOString(),
+            read: true,
+            folder: 'sent',
+        };
+
+        emailsRef.current = [...emailsRef.current, sent];
+        sim.events.emit({ type: 'custom:email-sent', data: sent, timestamp: Date.now() });
+    }, []);
+
+    const handleEmailMarkRead = useCallback((emailId: string) => {
+        emailsRef.current = emailsRef.current.map(e =>
+            e.id === emailId ? { ...e, read: true } : e,
+        );
+    }, []);
+
+    // ── Log refresh handler ─────────────────────────────────────
+    const handleLogRefresh = useCallback(() => {
+        const sim = simulationRef.current;
+        if (sim === null) return;
+        sim.events.emit({ type: 'custom:log-refresh', data: {}, timestamp: Date.now() });
+    }, []);
+
+    // ── File manager handlers ───────────────────────────────────
+    const handleListDir = useCallback((path: string): readonly FileEntry[] => {
+        const sim = simulationRef.current;
+        if (sim === null) return [];
+
+        // Query VFS through event bus — modules respond with file listings
+        const entries: FileEntry[] = [];
+        const unsub = sim.events.onPrefix('custom:vfs-listing', (event) => {
+            const listing = (event as { data: unknown }).data as { path: string; entries: readonly FileEntry[] };
+            if (listing.path === path) {
+                entries.push(...listing.entries);
+            }
+        });
+        sim.events.emit({ type: 'custom:vfs-list', data: { path }, timestamp: Date.now() });
+        unsub();
+        return entries;
+    }, []);
+
+    const handleReadFile = useCallback((path: string): string | null => {
+        const sim = simulationRef.current;
+        if (sim === null) return null;
+
+        let content: string | null = null;
+        const unsub = sim.events.onPrefix('custom:vfs-content', (event) => {
+            const result = (event as { data: unknown }).data as { path: string; content: string };
+            if (result.path === path) {
+                content = result.content;
+            }
+        });
+        sim.events.emit({ type: 'custom:vfs-read', data: { path }, timestamp: Date.now() });
+        unsub();
+        return content;
+    }, []);
+
+    // ── Process viewer handler ──────────────────────────────────
+    const handleProcessRefresh = useCallback(() => {
+        const sim = simulationRef.current;
+        if (sim === null) return;
+        sim.events.emit({ type: 'custom:process-refresh', data: {}, timestamp: Date.now() });
+    }, []);
+
+    // ── Packet capture handlers ─────────────────────────────────
+    const handleToggleCapture = useCallback(() => {
+        setCapturing(prev => !prev);
+    }, []);
+
+    const handleClearPackets = useCallback(() => {
+        packetsRef.current = [];
+    }, []);
+
+    // ── Open new lens (from terminal OSC or keyboard shortcut) ──
+    const handleOpenLens = useCallback((type: string, config: Readonly<Record<string, unknown>>) => {
+        const id = generateLensId();
+        const titles: Record<string, string> = {
+            'terminal': 'Terminal',
+            'browser': 'Browser',
+            'browse': 'Browser',
+            'file-manager': 'Files',
+            'email': 'Email',
+            'network-map': 'Network',
+            'log-viewer': 'Logs',
+            'process-viewer': 'Processes',
+            'packet-capture': 'Packets',
+        };
+        const normalizedType = type === 'browse' ? 'browser' : type;
+
+        const lens: LensInstance = {
+            id,
+            type: normalizedType,
+            title: titles[type] ?? type,
+            targetMachine: worldSpec.startMachine,
+            config,
+        };
+        dispatchCompositor({ type: 'open-lens', lens, position: 'right' });
+    }, [worldSpec]);
+
+    // ── Register Shortcuts ──────────────────────────────────────
+    useEffect(() => {
+        registerShortcut('ctrl+shift+t', () => { handleOpenLens('terminal', {}); });
+        registerShortcut('ctrl+shift+b', () => { handleOpenLens('browser', { url: 'about:blank' }); });
+        registerShortcut('ctrl+shift+e', () => { handleOpenLens('email', {}); });
+        registerShortcut('ctrl+shift+f', () => { handleOpenLens('file-manager', {}); });
+        registerShortcut('ctrl+shift+n', () => { handleOpenLens('network-map', {}); });
+        registerShortcut('ctrl+shift+l', () => { handleOpenLens('log-viewer', {}); });
+        registerShortcut('ctrl+shift+p', () => { handleOpenLens('process-viewer', {}); });
+        registerShortcut('ctrl+shift+k', () => { handleOpenLens('packet-capture', {}); });
+
+        registerShortcut('ctrl+tab', () => {
+            if (compositorState.taskbar.length <= 1) return;
+            const currentIdx = compositorState.taskbar.indexOf(compositorState.focusedLensId ?? '');
+            const nextIdx = currentIdx === -1 || currentIdx === compositorState.taskbar.length - 1 ? 0 : currentIdx + 1;
+            dispatchCompositor({ type: 'focus-lens', lensId: compositorState.taskbar[nextIdx]! });
+        });
+
+        registerShortcut('ctrl+shift+tab', () => {
+            if (compositorState.taskbar.length <= 1) return;
+            const currentIdx = compositorState.taskbar.indexOf(compositorState.focusedLensId ?? '');
+            const prevIdx = currentIdx <= 0 ? compositorState.taskbar.length - 1 : currentIdx - 1;
+            dispatchCompositor({ type: 'focus-lens', lensId: compositorState.taskbar[prevIdx]! });
+        });
+
+        registerShortcut('ctrl+w', () => {
+            const focusedId = compositorState.focusedLensId;
+            if (focusedId === null) return;
+            const lens = compositorState.lenses.get(focusedId);
+            if (lens?.type === 'terminal') {
+                if (!window.confirm('Are you sure you want to close this terminal?')) return;
+            }
+            dispatchCompositor({ type: 'close-lens', lensId: focusedId });
+        });
+
+        registerShortcut('f11', () => {
+            const focusedId = compositorState.focusedLensId;
+            if (focusedId !== null) {
+                dispatchCompositor({ type: 'toggle-maximize', lensId: focusedId });
+            }
+        });
+
+        registerShortcut('escape', () => {
+            if (compositorState.maximizedLensId !== null) {
+                dispatchCompositor({ type: 'toggle-maximize', lensId: compositorState.maximizedLensId });
+            }
+        });
+    }, [registerShortcut, handleOpenLens, compositorState, dispatchCompositor]);
+
+    // Inject xterm.js CSS on mount
+    useEffect(() => { injectXtermCSS(); }, []);
+
+    // Boot simulation
+    useEffect(() => {
+        let destroyed = false;
+
+        async function boot(): Promise<void> {
+            try {
+                setBootMessage('Creating VM backend...');
+                const backend = createV86Backend();
+
+                setBootMessage('Validating WorldSpec...');
+                const sim = createSimulation({
+                    worldSpec,
+                    backend,
+                    imageBaseUrl: '/images',
+                    biosUrl: '/v86/seabios.bin',
+                    vgaBiosUrl: '/v86/vgabios.bin',
+                });
+
+                if (destroyed) { sim.destroy(); return; }
+
+                simulationRef.current = sim;
+
+                setBootMessage('Booting virtual machine...');
+                await sim.boot();
+
+                if (destroyed) { sim.destroy(); return; }
+
+                const playerTerminal = sim.getPlayerTerminal();
+                setTerminalIO(playerTerminal);
+                setSimState(sim.getState());
+
+                // Open initial terminal lens
+                const termLensId = generateLensId();
+                const termLens: LensInstance = {
+                    id: termLensId,
+                    type: 'terminal',
+                    title: 'Terminal',
+                    targetMachine: worldSpec.startMachine,
+                    config: {},
+                };
+                dispatchCompositor({ type: 'open-lens', lens: termLens });
+            } catch (error: unknown) {
+                if (!destroyed) {
+                    setBootMessage(
+                        `Boot failed: ${error instanceof Error ? error.message : String(error)}`,
+                    );
+                }
+            }
+        }
+
+        boot().catch(() => { });
+
+        return () => {
+            destroyed = true;
+            const sim = simulationRef.current;
+            if (sim !== null) {
+                sim.destroy();
+                simulationRef.current = null;
+            }
+        };
+    }, [worldSpec]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Update sim state periodically
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const sim = simulationRef.current;
+            if (sim !== null) { setSimState(sim.getState()); }
+        }, 1000);
+        return () => { clearInterval(interval); };
+    }, []);
+
+    // ── Browser navigation handler ──────────────────────────────
+    // Routes HTTP requests through the fabric's registered external
+    // service handlers — the same ones that serve VM HTTP traffic.
+    // This means the browser sees exactly what curl/wget would see.
+    const handleBrowserNavigate = useCallback((url: string, method?: string, body?: string): BrowserResponse => {
+        const sim = simulationRef.current;
+        if (sim === null) {
+            return {
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: new Map(),
+                body: '<html><body style="font-family:monospace;background:#1a1a1a;color:#ff5555;padding:40px"><h1>Connection Failed</h1><p style="color:#999">ERR_CONNECTION_REFUSED — No simulation running.</p></body></html>',
+                contentType: 'text/html',
+            };
+        }
+
+        try {
+            const hostname = extractHostname(url);
+            const path = extractPath(url);
+
+            // Look up the handler from the fabric (same handlers that serve VMs)
+            const handler = sim.fabric.getExternalHandler(hostname);
+            if (handler === undefined) {
+                // Realistic DNS failure — looks like a real browser error
+                const availableDomains = sim.fabric.getExternalDomains();
+                return {
+                    status: 0,
+                    statusText: 'DNS Resolution Failed',
+                    headers: new Map(),
+                    body: `<html><body style="font-family:-apple-system,sans-serif;background:#1a1a1a;color:#e0e0e0;padding:40px;max-width:600px;margin:0 auto">` +
+                        `<h1 style="color:#ff5555;font-size:1.2rem">This site can\u2019t be reached</h1>` +
+                        `<p style="color:#999"><strong>${hostname}</strong>\u2019s server DNS address could not be found.</p>` +
+                        `<p style="color:#666;font-size:0.85rem">ERR_NAME_NOT_RESOLVED</p>` +
+                        `<hr style="border:none;border-top:1px solid #333;margin:20px 0">` +
+                        (availableDomains.length > 0
+                            ? `<p style="color:#666;font-size:0.8rem">Available services on this network:</p><ul style="color:#00ff41;font-size:0.8rem">${availableDomains.map(d => `<li><a href="http://${d}" style="color:#00aaff">${d}</a></li>`).join('')}</ul>`
+                            : `<p style="color:#666;font-size:0.8rem">No HTTP services are available on this network.</p>`) +
+                        `</body></html>`,
+                    contentType: 'text/html',
+                };
+            }
+
+            // Build request matching ExternalRequest interface
+            const reqHeaders = new Map<string, string>();
+            reqHeaders.set('host', hostname);
+            reqHeaders.set('user-agent', 'VARIANT-Browser/1.0');
+            reqHeaders.set('accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
+            if (body !== undefined) {
+                reqHeaders.set('content-type', 'application/x-www-form-urlencoded');
+                reqHeaders.set('content-length', String(new TextEncoder().encode(body).length));
+            }
+
+            const response = handler.handleRequest({
+                method: method ?? 'GET',
+                path,
+                headers: reqHeaders,
+                body: body !== undefined ? new TextEncoder().encode(body) : null,
+            });
+
+            const decoder = new TextDecoder();
+            const bodyText = decoder.decode(response.body);
+            const contentType = response.headers.get('content-type') ?? 'text/html';
+
+            const statusTexts: Record<number, string> = {
+                200: 'OK', 201: 'Created', 204: 'No Content',
+                301: 'Moved Permanently', 302: 'Found', 304: 'Not Modified',
+                400: 'Bad Request', 401: 'Unauthorized', 403: 'Forbidden',
+                404: 'Not Found', 405: 'Method Not Allowed', 429: 'Too Many Requests',
+                500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable',
+            };
+
+            return {
+                status: response.status,
+                statusText: statusTexts[response.status] ?? `HTTP ${response.status}`,
+                headers: response.headers,
+                body: bodyText,
+                contentType,
+            };
+        } catch (err: unknown) {
+            return {
+                status: 500,
+                statusText: 'Internal Server Error',
+                headers: new Map(),
+                body: `<html><body style="font-family:monospace;background:#1a1a1a;color:#ff5555;padding:40px"><h1>500 Internal Server Error</h1><pre style="color:#999">${err instanceof Error ? err.message : String(err)}</pre></body></html>`,
+                contentType: 'text/html',
+            };
+        }
+    }, []);
+
+    const handleExit = useCallback(() => {
+        const sim = simulationRef.current;
+        if (sim !== null) {
+            sim.destroy();
+            simulationRef.current = null;
+        }
+        onExit();
+    }, [onExit]);
+
+    const handleHint = useCallback(() => {
+        const sim = simulationRef.current;
+        if (sim === null) return;
+        const hint = sim.useHint();
+        if (hint !== null) {
+            console.log('[HINT]', hint);
+            setSimState(sim.getState());
+        }
+    }, []);
+
+    // ── Render lens by type ─────────────────────────────────────
+    const renderLens = useCallback((lens: LensInstance, focused: boolean): JSX.Element => {
+        switch (lens.type) {
+            case 'terminal':
+                return (
+                    <TerminalLens
+                        terminalIO={terminalIO}
+                        lensContext={{
+                            instance: lens,
+                            definition: {
+                                type: 'terminal',
+                                displayName: 'Terminal',
+                                description: 'VM terminal',
+                                icon: '>_',
+                                capabilities: { targetMachine: 'required', compatibleBackends: null, writable: true, custom: {} },
+                                constraints: { minWidth: 200, minHeight: 150, preferredAspectRatio: null, preferredSize: 0.5 },
+                                shortcut: null,
+                                allowMultiple: true,
+                            },
+                            events: simulationRef.current?.events ?? { emit() { }, on() { return () => { }; }, once() { return () => { }; }, waitFor() { return new Promise(() => { }); }, onPrefix() { return () => { }; }, getLog() { return []; }, clearLog() { }, removeAllListeners() { } },
+                            sendMessage: () => false,
+                            broadcastMessage: () => 0,
+                            requestOpenLens: (req) => { handleOpenLens(req.type, req.config ?? {}); },
+                            setTitle: (title) => { dispatchCompositor({ type: 'set-title', lensId: lens.id, title }); },
+                            requestFocus: () => { dispatchCompositor({ type: 'focus-lens', lensId: lens.id }); },
+                        }}
+                        focused={focused}
+                    />
+                );
+
+            case 'browser':
+                return (
+                    <BrowserLens
+                        initialUrl={typeof lens.config['url'] === 'string' ? lens.config['url'] : typeof lens.config['initialUrl'] === 'string' ? lens.config['initialUrl'] : 'about:blank'}
+                        onNavigate={handleBrowserNavigate}
+                        focused={focused}
+                    />
+                );
+
+            case 'email':
+                return (
+                    <EmailLens
+                        account={typeof lens.config['account'] === 'string' ? lens.config['account'] : 'operator@variant.local'}
+                        emails={emailsRef.current}
+                        onSend={handleEmailSend}
+                        onMarkRead={handleEmailMarkRead}
+                        focused={focused}
+                    />
+                );
+
+            case 'log-viewer':
+                return (
+                    <LogViewerLens
+                        logs={logsRef.current}
+                        onRefresh={handleLogRefresh}
+                        focused={focused}
+                    />
+                );
+
+            case 'file-manager':
+                return (
+                    <FileManagerLens
+                        onListDir={handleListDir}
+                        onReadFile={handleReadFile}
+                        focused={focused}
+                    />
+                );
+
+            case 'network-map':
+                return (
+                    <NetworkMapLens
+                        nodes={networkNodesRef.current}
+                        edges={networkEdgesRef.current}
+                        traffic={trafficFlowsRef.current}
+                        focused={focused}
+                    />
+                );
+
+            case 'process-viewer':
+                return (
+                    <ProcessViewerLens
+                        processes={processesRef.current}
+                        machineName={lens.targetMachine ?? 'unknown'}
+                        onRefresh={handleProcessRefresh}
+                        focused={focused}
+                    />
+                );
+
+            case 'packet-capture':
+                return (
+                    <PacketCaptureLens
+                        packets={packetsRef.current}
+                        capturing={capturing}
+                        onToggleCapture={handleToggleCapture}
+                        onClear={handleClearPackets}
+                        focused={focused}
+                    />
+                );
+
+            default:
+                return (
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: '100%',
+                        color: '#666',
+                        fontSize: '0.8rem',
+                        fontFamily: 'var(--font-mono)',
+                    }}>
+                        Lens type "{lens.type}" not yet implemented
+                    </div>
+                );
+        }
+    }, [terminalIO, handleOpenLens, handleBrowserNavigate, handleEmailSend, handleEmailMarkRead, handleLogRefresh, handleListDir, handleReadFile, handleProcessRefresh, handleToggleCapture, handleClearPackets, capturing]);
+
+    // ── Pre-boot screen ─────────────────────────────────────────
+    if (terminalIO === null) {
+        return (
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100vh',
+                background: '#0a0e14',
+                fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+            }}>
+                <div style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 700,
+                    color: '#00ff41',
+                    textShadow: '0 0 20px rgba(0, 255, 65, 0.4)',
+                    letterSpacing: '0.1em',
+                    marginBottom: '2rem',
+                }}>
+                    VARIANT
+                </div>
+                <div style={{
+                    width: '40px',
+                    height: '40px',
+                    border: '3px solid #21262d',
+                    borderTopColor: '#00ff41',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
+                    marginBottom: '1rem',
+                }} />
+                <div style={{ color: '#8b949e', fontSize: '0.8rem' }}>
+                    {bootMessage}
+                </div>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+        );
+    }
+
+    // ── Simulation UI ───────────────────────────────────────────
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100vh',
+            background: 'var(--bg-primary, #0a0e14)',
+            fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        }}>
+            {/* Status Bar */}
+            <StatusBar
+                simState={simState}
+                onExit={handleExit}
+                onHint={handleHint}
+                onOpenLens={handleOpenLens}
+                onSettings={onSettings}
+            />
+
+            {/* Lens Compositor */}
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+                <LensCompositor
+                    state={compositorState}
+                    dispatch={dispatchCompositor}
+                    renderLens={renderLens}
+                />
+            </div>
+
+            {/* Objective Panel */}
+            {simState !== null && (
+                <ObjectivePanel
+                    objectives={worldSpec.objectives}
+                    status={simState.objectiveStatus}
+                />
+            )}
+
+            {/* Notifications */}
+            <NotificationToast notifications={notifications} onDismiss={dismissNotification} />
+        </div>
+    );
+}
+
+// ── Status Bar ─────────────────────────────────────────────────
+
+function StatusBar({
+    simState,
+    onExit,
+    onHint,
+    onOpenLens,
+    onSettings,
+}: {
+    readonly simState: SimulationState | null;
+    readonly onExit: () => void;
+    readonly onHint: () => void;
+    readonly onOpenLens: (type: string, config: Readonly<Record<string, unknown>>) => void;
+    readonly onSettings: () => void;
+}): JSX.Element {
+    const formatTime = (ms: number): string => {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    };
+
+    return (
+        <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '4px 12px',
+            borderBottom: '1px solid var(--border-default, #21262d)',
+            fontSize: '0.7rem',
+            color: '#666',
+            background: 'var(--bg-secondary, #0d1117)',
+            minHeight: '28px',
+            flexShrink: 0,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ color: '#00ff41', fontWeight: 700 }}>VARIANT</span>
+
+                {simState !== null && (
+                    <>
+                        <span style={{
+                            color: simState.phase === 'running' ? '#00ff41'
+                                : simState.phase === 'completed' ? '#f1fa8c'
+                                    : simState.phase === 'failed' ? '#ff5555'
+                                        : '#666',
+                        }}>
+                            {'\u25CF'} {simState.phase.toUpperCase()}
+                        </span>
+                        <span>{formatTime(simState.elapsedMs)}</span>
+                        <span>Score: {simState.score}</span>
+                    </>
+                )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '4px' }}>
+                {/* Quick-open lens buttons */}
+                <button onClick={() => { onOpenLens('terminal', {}); }} style={statusBtnStyle} title="New Terminal">
+                    {'[>_]'}
+                </button>
+                <button onClick={() => { onOpenLens('browser', { url: 'about:blank' }); }} style={statusBtnStyle} title="Open Browser (Ctrl+Shift+B)">
+                    {'[www]'}
+                </button>
+                <button onClick={() => { onOpenLens('email', {}); }} style={statusBtnStyle} title="Open Email (Ctrl+Shift+E)">
+                    {'[@]'}
+                </button>
+                <button onClick={() => { onOpenLens('file-manager', {}); }} style={statusBtnStyle} title="Open File Manager (Ctrl+Shift+F)">
+                    {'[dir]'}
+                </button>
+                <button onClick={() => { onOpenLens('log-viewer', {}); }} style={statusBtnStyle} title="Open Log Viewer (Ctrl+Shift+L)">
+                    {'[log]'}
+                </button>
+                <button onClick={() => { onOpenLens('network-map', {}); }} style={statusBtnStyle} title="Network Map (Ctrl+Shift+N)">
+                    {'[net]'}
+                </button>
+                <button onClick={() => { onOpenLens('process-viewer', {}); }} style={statusBtnStyle} title="Process Viewer (Ctrl+Shift+P)">
+                    {'[ps]'}
+                </button>
+                <button onClick={() => { onOpenLens('packet-capture', {}); }} style={statusBtnStyle} title="Packet Capture (Ctrl+Shift+K)">
+                    {'[pcap]'}
+                </button>
+
+                <div style={{ width: '1px', background: '#21262d', margin: '0 4px' }} />
+
+                <button onClick={onHint} style={{ ...statusBtnStyle, color: '#f1fa8c' }}>
+                    HINT
+                </button>
+                <button onClick={onSettings} style={statusBtnStyle} title="Settings">
+                    SETTINGS
+                </button>
+                <button onClick={onExit} style={{ ...statusBtnStyle, color: '#ff5555' }}>
+                    EXIT
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ── Objective Panel ────────────────────────────────────────────
+
+interface ObjectivePanelProps {
+    readonly objectives: readonly import('../core/world/types').ObjectiveSpec[];
+    readonly status: ReadonlyMap<string, import('../core/engine').ObjectiveStatus>;
+}
+
+function ObjectivePanel({ objectives, status }: ObjectivePanelProps): JSX.Element {
+    return (
+        <div style={{
+            borderTop: '1px solid var(--border-default, #21262d)',
+            padding: '4px 12px',
+            background: 'var(--bg-secondary, #0d1117)',
+            fontSize: '0.65rem',
+            display: 'flex',
+            gap: '20px',
+            overflow: 'hidden',
+            flexShrink: 0,
+        }}>
+            {objectives.map(obj => {
+                const objStatus = status.get(obj.id) ?? 'locked';
+                const icon = objStatus === 'completed' ? '\u2713'
+                    : objStatus === 'available' ? '\u25CB'
+                        : objStatus === 'in-progress' ? '\u25D0'
+                            : '\u25CC';
+                const color = objStatus === 'completed' ? '#00ff41'
+                    : objStatus === 'available' ? '#e0e0e0'
+                        : '#444';
+
+                return (
+                    <div key={obj.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color, fontSize: '0.8rem' }}>{icon}</span>
+                        <span style={{ color }}>
+                            {obj.title}
+                            {!obj.required && <span style={{ color: '#444', marginLeft: '4px' }}>(bonus)</span>}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// ── Error Screen ───────────────────────────────────────────────
+
+function ErrorScreen({ message, onBack }: { readonly message: string; readonly onBack: () => void }): JSX.Element {
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100vh',
+            background: '#0a0a0a',
+            color: '#ff5555',
+            fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        }}>
+            <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>ERROR</h1>
+            <p style={{ fontSize: '0.85rem', color: '#999', maxWidth: '500px', textAlign: 'center', lineHeight: 1.6 }}>
+                {message}
+            </p>
+            <button
+                onClick={onBack}
+                style={{
+                    marginTop: '2rem',
+                    background: 'transparent',
+                    border: '1px solid #ff555560',
+                    color: '#ff5555',
+                    padding: '8px 24px',
+                    fontFamily: 'inherit',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                }}
+            >
+                Back to Menu
+            </button>
+        </div>
+    );
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+function extractHostname(url: string): string {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return url.replace(/^https?:\/\//, '').split('/')[0] ?? '';
+    }
+}
+
+function extractPath(url: string): string {
+    try {
+        const u = new URL(url);
+        return u.pathname + u.search;
+    } catch {
+        const idx = url.indexOf('/', url.indexOf('//') + 2);
+        return idx === -1 ? '/' : url.slice(idx);
+    }
+}
+
+const statusBtnStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: '1px solid #21262d',
+    color: '#666',
+    padding: '2px 8px',
+    fontFamily: 'inherit',
+    fontSize: '0.65rem',
+    cursor: 'pointer',
+    borderRadius: '2px',
+};
