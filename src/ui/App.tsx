@@ -20,6 +20,7 @@ import { createSimulacrumBackend } from '../backends/simulacrum';
 import { createBackendRouter } from '../backends/backend-router';
 import { createObjectiveDetector } from '../modules/objective-detector';
 import { createScoringEngine } from '../modules/scoring-engine';
+import { createGameOverDetector } from '../modules/gameover-detector';
 import { injectXtermCSS } from '../modules/terminal';
 import { DEMO_01 } from '../levels/demo-01';
 import { DEMO_02 } from '../levels/demo-02';
@@ -986,6 +987,7 @@ function SimulationScreen({
                 const registry = createModuleRegistry();
                 registry.register('objective-detector', createObjectiveDetector);
                 registry.register('scoring-engine', createScoringEngine);
+                registry.register('gameover-detector', createGameOverDetector);
 
                 setBootMessage('Validating WorldSpec...');
                 const sim = createSimulation({

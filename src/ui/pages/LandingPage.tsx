@@ -275,8 +275,8 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                     marginTop: '4rem', fontSize: '0.65rem', fontFamily: FONT_MONO, color: C.dim,
                     display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center',
                 }}>
-                    <span>267 source files</span>
-                    <span>2730+ tests</span>
+                    <span>294 source files</span>
+                    <span>3002 tests</span>
                     <span>13 protocol handlers</span>
                     <span>MITRE ATT&CK mapped</span>
                 </div>
@@ -431,6 +431,7 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', fontFamily: FONT_MONO, fontSize: '0.65rem' }}>
                     <a href="https://santh.io" style={{ color: C.dim, textDecoration: 'none' }}>santh.io</a>
                     <a href="https://invariant.santh.io" style={{ color: C.dim, textDecoration: 'none' }}>invariant</a>
+                    <a href="https://github.com/mukundthiru1/variant" style={{ color: C.dim, textDecoration: 'none' }}>github</a>
                 </div>
             </footer>
         </div>
