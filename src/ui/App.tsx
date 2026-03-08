@@ -738,6 +738,7 @@ function SimulationScreen({
     const processesRef = useRef<readonly ProcessInfo[]>([]);
     const packetsRef = useRef<readonly CapturedPacket[]>([]);
     const [capturing, setCapturing] = useState(true);
+    const [announcement, setAnnouncement] = useState<string>('');
 
     // Subscribe to event bus for lens data
     useEffect(() => {
@@ -1111,6 +1112,7 @@ function SimulationScreen({
                 const obj = worldSpec?.objectives.find(o => o.id === event.objectiveId);
                 const label = obj?.title ?? event.objectiveId;
                 addNotification('success', 'Objective Complete', label, { timeout: 5000 });
+                setAnnouncement(`Objective completed: ${label}`);
             }));
             unsubs.push(sim.events.on('objective:progress', () => {
                 setSimState(sim.getState());
@@ -1118,6 +1120,7 @@ function SimulationScreen({
             unsubs.push(sim.events.on('sim:gameover', (event) => {
                 setSimState(sim.getState());
                 addNotification('error', 'Game Over', event.reason, { timeout: 0 });
+                setAnnouncement(`Game over: ${event.reason}`);
             }));
             unsubs.push(sim.events.onPrefix('custom:', (event) => {
                 if (event.type === 'custom:score-update') {
@@ -1130,7 +1133,7 @@ function SimulationScreen({
             clearInterval(interval);
             for (const unsub of unsubs) unsub();
         };
-    }, [terminalIO, worldSpec, addNotification]); // Re-subscribe when terminal connects (sim is ready)
+    }, [terminalIO, worldSpec, addNotification, setAnnouncement]); // Re-subscribe when terminal connects (sim is ready)
 
     // ── Browser navigation handler ──────────────────────────────
     // Routes HTTP requests through the fabric's registered external
@@ -1474,6 +1477,26 @@ function SimulationScreen({
             background: 'var(--bg-primary, #0a0e14)',
             fontFamily: '"JetBrains Mono", "Fira Code", monospace',
         }}>
+            {/* Screen reader announcements */}
+            <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                style={{
+                    position: 'absolute',
+                    width: '1px',
+                    height: '1px',
+                    padding: 0,
+                    margin: '-1px',
+                    overflow: 'hidden',
+                    clip: 'rect(0, 0, 0, 0)',
+                    whiteSpace: 'nowrap',
+                    border: 0,
+                }}
+            >
+                {announcement}
+            </div>
+
             {/* Status Bar */}
             <StatusBar
                 simState={simState}
@@ -1575,18 +1598,22 @@ function StatusBar({
     };
 
     return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '4px 12px',
-            borderBottom: '1px solid var(--border-default, #21262d)',
-            fontSize: '0.7rem',
-            color: '#666',
-            background: 'var(--bg-secondary, #0d1117)',
-            minHeight: '28px',
-            flexShrink: 0,
-        }}>
+        <div
+            role="toolbar"
+            aria-label="Simulation controls"
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '4px 12px',
+                borderBottom: '1px solid var(--border-default, #21262d)',
+                fontSize: '0.7rem',
+                color: '#666',
+                background: 'var(--bg-secondary, #0d1117)',
+                minHeight: '28px',
+                flexShrink: 0,
+            }}
+        >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ color: '#D4A03A', fontWeight: 700 }}>VARIANT</span>
 
@@ -1617,42 +1644,42 @@ function StatusBar({
                 )}
             </div>
 
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px' }} role="group" aria-label="Quick open lenses">
                 {/* Quick-open lens buttons */}
-                <button type="button" onClick={() => { onOpenLens('terminal', {}); }} style={statusBtnStyle} title="New Terminal">
+                <button type="button" onClick={() => { onOpenLens('terminal', {}); }} style={statusBtnStyle} title="New Terminal" aria-label="Open new terminal lens">
                     {'[>_]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('browser', { url: 'about:blank' }); }} style={statusBtnStyle} title="Open Browser (Ctrl+Shift+B)">
+                <button type="button" onClick={() => { onOpenLens('browser', { url: 'about:blank' }); }} style={statusBtnStyle} title="Open Browser (Ctrl+Shift+B)" aria-label="Open browser lens">
                     {'[www]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('email', {}); }} style={statusBtnStyle} title="Open Email (Ctrl+Shift+E)">
+                <button type="button" onClick={() => { onOpenLens('email', {}); }} style={statusBtnStyle} title="Open Email (Ctrl+Shift+E)" aria-label="Open email lens">
                     {'[@]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('file-manager', {}); }} style={statusBtnStyle} title="Open File Manager (Ctrl+Shift+F)">
+                <button type="button" onClick={() => { onOpenLens('file-manager', {}); }} style={statusBtnStyle} title="Open File Manager (Ctrl+Shift+F)" aria-label="Open file manager lens">
                     {'[dir]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('log-viewer', {}); }} style={statusBtnStyle} title="Open Log Viewer (Ctrl+Shift+L)">
+                <button type="button" onClick={() => { onOpenLens('log-viewer', {}); }} style={statusBtnStyle} title="Open Log Viewer (Ctrl+Shift+L)" aria-label="Open log viewer lens">
                     {'[log]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('network-map', {}); }} style={statusBtnStyle} title="Network Map (Ctrl+Shift+N)">
+                <button type="button" onClick={() => { onOpenLens('network-map', {}); }} style={statusBtnStyle} title="Network Map (Ctrl+Shift+N)" aria-label="Open network map lens">
                     {'[net]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('process-viewer', {}); }} style={statusBtnStyle} title="Process Viewer (Ctrl+Shift+P)">
+                <button type="button" onClick={() => { onOpenLens('process-viewer', {}); }} style={statusBtnStyle} title="Process Viewer (Ctrl+Shift+P)" aria-label="Open process viewer lens">
                     {'[ps]'}
                 </button>
-                <button type="button" onClick={() => { onOpenLens('packet-capture', {}); }} style={statusBtnStyle} title="Packet Capture (Ctrl+Shift+K)">
+                <button type="button" onClick={() => { onOpenLens('packet-capture', {}); }} style={statusBtnStyle} title="Packet Capture (Ctrl+Shift+K)" aria-label="Open packet capture lens">
                     {'[pcap]'}
                 </button>
 
                 <div style={{ width: '1px', background: '#21262d', margin: '0 4px' }} />
 
-                <button type="button" onClick={onHint} style={{ ...statusBtnStyle, color: '#f1fa8c' }}>
+                <button type="button" onClick={onHint} style={{ ...statusBtnStyle, color: '#f1fa8c' }} aria-label="Get a hint">
                     HINT
                 </button>
-                <button type="button" onClick={onSettings} style={statusBtnStyle} title="Settings">
+                <button type="button" onClick={onSettings} style={statusBtnStyle} title="Settings" aria-label="Open settings">
                     SETTINGS
                 </button>
-                <button type="button" onClick={onExit} style={{ ...statusBtnStyle, color: '#ff5555' }}>
+                <button type="button" onClick={onExit} style={{ ...statusBtnStyle, color: '#ff5555' }} aria-label="Exit simulation">
                     EXIT
                 </button>
             </div>
@@ -1723,25 +1750,21 @@ function ObjectivePanel({ objectives, status }: ObjectivePanelProps): JSX.Elemen
 
     return (
         <div style={{ flexShrink: 0 }}>
-            {/* Mission Complete Banner */}
+            {/* Objectives Complete Banner */}
             {allRequiredCompleted && (
                 <div style={{
-                    background: 'linear-gradient(90deg, rgba(212, 160, 58, 0.2) 0%, rgba(212, 160, 58, 0.4) 50%, rgba(212, 160, 58, 0.2) 100%)',
-                    borderTop: '1px solid rgba(212, 160, 58, 0.5)',
+                    background: 'rgba(212, 160, 58, 0.06)',
+                    borderTop: '1px solid rgba(212, 160, 58, 0.15)',
                     padding: '6px 12px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    animation: 'missionCompletePulse 0.5s ease-out',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#D4A03A', fontSize: '0.9rem' }}>★</span>
-                        <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.1em' }}>
-                            MISSION COMPLETE
-                        </span>
-                    </div>
-                    <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 'bold' }}>
-                        SCORE: {totalScore} pts
+                    <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.06em' }}>
+                        ALL OBJECTIVES COMPLETE
+                    </span>
+                    <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 600 }}>
+                        {totalScore} pts
                     </span>
                 </div>
             )}

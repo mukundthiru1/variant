@@ -120,29 +120,7 @@ const VERSION = 'v0.1.0';
 const TAGLINE = 'Boot real Linux in your browser. Attack real protocols. Complete objectives. No servers. No data leaves your machine.';
 
 export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: LandingPageProps): JSX.Element {
-    const [displayedTagline, setDisplayedTagline] = useState('');
-    const [showGlow, setShowGlow] = useState(true);
     const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
-
-    useEffect(() => {
-        let index = 0;
-        const interval = setInterval(() => {
-            if (index <= TAGLINE.length) {
-                setDisplayedTagline(TAGLINE.slice(0, index));
-                index++;
-            } else {
-                clearInterval(interval);
-            }
-        }, 30);
-        return () => clearInterval(interval);
-    }, []);
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setShowGlow(prev => !prev);
-        }, 1500);
-        return () => clearInterval(interval);
-    }, []);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -166,20 +144,16 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
     return (
         <div className="animated-grid" style={{ background: C.bg, color: C.text, fontFamily: FONT_BODY, minHeight: '100vh', overflowX: 'hidden', scrollBehavior: 'smooth' }}>
             <style>{`
-                @keyframes blink {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0; }
-                }
                 @keyframes gridScroll {
                     0% { background-position: 0 0; }
                     100% { background-position: 60px 60px; }
                 }
                 .animated-grid {
-                    background-image: 
-                        linear-gradient(rgba(212, 160, 58, 0.05) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(212, 160, 58, 0.05) 1px, transparent 1px);
+                    background-image:
+                        linear-gradient(rgba(212, 160, 58, 0.03) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(212, 160, 58, 0.03) 1px, transparent 1px);
                     background-size: 60px 60px;
-                    animation: gridScroll 20s linear infinite;
+                    animation: gridScroll 30s linear infinite;
                 }
             `}</style>
             {/* NAV */}
@@ -238,20 +212,21 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                 </h1>
                 <p style={{
                     fontFamily: FONT_BODY, fontSize: 'clamp(0.9rem, 2vw, 1rem)', color: C.muted,
-                    marginTop: '1.25rem', maxWidth: '420px', lineHeight: 1.6, letterSpacing: '0.01em',
-                    minHeight: '3.2em',
+                    marginTop: '1.25rem', maxWidth: '460px', lineHeight: 1.6, letterSpacing: '0.01em',
                 }}>
-                    {displayedTagline}
-                    <span style={{ animation: 'blink 1s step-end infinite' }}>▋</span>
+                    {TAGLINE}
                 </p>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '2.5rem' }}>
                     <button type="button" onClick={onLaunch} style={{
                         padding: '12px 28px', fontSize: '0.85rem', fontWeight: 600, fontFamily: FONT_MONO,
                         color: C.bg, background: C.signal, border: 'none', borderRadius: '2px',
                         cursor: 'pointer', letterSpacing: '0.04em',
-                        boxShadow: showGlow ? `0 0 40px ${C.signalGlow}` : `0 0 24px ${C.signalGlow}`,
-                        transition: 'box-shadow 0.3s ease',
-                    }}>
+                        boxShadow: `0 0 24px ${C.signalGlow}`,
+                        transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 0 36px ${C.signalGlow}`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.boxShadow = `0 0 24px ${C.signalGlow}`; e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
                         Launch Simulation
                     </button>
                     <button type="button" onClick={onMarketplace} style={{
@@ -265,11 +240,6 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                     >
                         Browse Levels
                     </button>
-                </div>
-                <div style={{
-                    marginTop: '1rem', fontSize: '0.7rem', fontFamily: FONT_MONO, color: C.dim,
-                }}>
-                    Press Enter to launch
                 </div>
                 <div style={{
                     marginTop: '4rem', fontSize: '0.65rem', fontFamily: FONT_MONO, color: C.dim,

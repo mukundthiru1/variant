@@ -18,7 +18,7 @@
  * reusable and lens-type-agnostic.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import type { LayoutNode, LensInstance, CompositorState, CompositorAction } from '../lens/types';
 
 // ── Props ───────────────────────────────────────────────────────
@@ -38,14 +38,34 @@ export interface LensCompositorProps {
 // ── Compositor Component ────────────────────────────────────────
 
 export function LensCompositor({ state, dispatch, renderLens }: LensCompositorProps): JSX.Element {
+    const lensContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const focusedLensId = state.focusedLensId;
+        if (focusedLensId === null) return;
+
+        const container = lensContainerRef.current;
+        if (container === null) return;
+
+        const focusedElement = container.querySelector(`[data-lens-id="${focusedLensId}"]`) as HTMLElement | null;
+        if (focusedElement) {
+            focusedElement.focus();
+        }
+    }, [state.focusedLensId]);
+
     return (
-        <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%',
-            width: '100%',
-            overflow: 'hidden',
-        }}>
+        <div
+            ref={lensContainerRef}
+            style={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                width: '100%',
+                overflow: 'hidden',
+            }}
+            role="tabpanel"
+            aria-label="Lens workspace"
+        >
             {/* Main layout area */}
             <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
                 {state.maximizedLensId !== null ? (
@@ -81,6 +101,8 @@ function renderMaximized(
 
     return (
         <div
+            data-lens-id={lens.id}
+            tabIndex={-1}
             style={{ width: '100%', height: '100%', position: 'relative' }}
             onClick={() => { dispatch({ type: 'focus-lens', lensId: lens.id }); }}
         >
@@ -118,6 +140,8 @@ function LayoutRenderer({ node, state, dispatch, renderLens, path }: LayoutRende
 
         return (
             <div
+                data-lens-id={lens.id}
+                tabIndex={-1}
                 style={{
                     width: '100%',
                     height: '100%',
@@ -418,16 +442,20 @@ interface TaskbarProps {
 
 function Taskbar({ state, dispatch }: TaskbarProps): JSX.Element {
     return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            padding: '2px 8px',
-            background: 'var(--bg-secondary, #0d1117)',
-            borderTop: '1px solid var(--border-default, #21262d)',
-            height: '24px',
-            overflow: 'hidden',
-        }}>
+        <div
+            role="tablist"
+            aria-label="Open lenses"
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                padding: '2px 8px',
+                background: 'var(--bg-secondary, #0d1117)',
+                borderTop: '1px solid var(--border-default, #21262d)',
+                height: '24px',
+                overflow: 'hidden',
+            }}
+        >
             {state.taskbar.map(lensId => {
                 const lens = state.lenses.get(lensId);
                 if (lens === undefined) return null;
@@ -437,6 +465,9 @@ function Taskbar({ state, dispatch }: TaskbarProps): JSX.Element {
                 return (
                     <button
                         key={lensId}
+                        role="tab"
+                        aria-selected={focused}
+                        aria-label={`${lens.title} lens${focused ? ', active' : ''}`}
                         onClick={() => { dispatch({ type: 'focus-lens', lensId }); }}
                         onDoubleClick={() => { dispatch({ type: 'toggle-maximize', lensId }); }}
                         style={{
