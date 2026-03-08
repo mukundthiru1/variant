@@ -47,37 +47,67 @@ export interface TrafficFlow {
     readonly timestamp: number;
 }
 
-const NODE_RADIUS = 22;
+const NODE_WIDTH = 72;
+const NODE_HEIGHT = 44;
+const NODE_RX = 6;
 
-const STATUS_COLORS: Record<NetworkNode['status'], string> = {
-    up: '#3DA67A',
-    down: '#666',
-    compromised: '#ff5555',
-    unknown: '#f1fa8c',
-};
+/** Player (attacker) nodes — amber. Target nodes — gray. Compromised — red. */
+const BORDER_PLAYER = '#D4A03A';
+const BORDER_TARGET = '#505050';
+const BORDER_COMPROMISED = '#C75450';
+
+const BG_MAP = '#0A0A0A';
+const TEXT_PRIMARY = '#E0E0E0';
+const TEXT_SECONDARY = '#8b949e';
 
 const TYPE_ICONS: Record<NetworkNode['type'], string> = {
-    workstation: '\u{1F5A5}',  // 🖥
-    server: '\u{1F5A7}',       // 🖧
-    router: '\u{1F310}',       // 🌐
-    firewall: '\u{1F6E1}',     // 🛡
-    cloud: '\u{2601}',         // ☁
-    attacker: '\u{1F480}',     // 💀
+    workstation: '\u{1F5A5}',
+    server: '\u{1F5A7}',
+    router: '\u{1F310}',
+    firewall: '\u{1F6E1}',
+    cloud: '\u{2601}',
+    attacker: '\u{1F480}',
 };
 
+/** Derive subnet id from IP for segment grouping (e.g. 10.0.1.5 -> 10.0.1.0). */
+function subnetFromIp(ip: string): string {
+    const parts = ip.trim().split(/\./);
+    if (parts.length >= 3) {
+        parts[3] = '0';
+        return parts.join('.');
+    }
+    return ip;
+}
+
+/** Simple grid layout when all positions are zero or collapsed. */
+function gridLayout(nodes: readonly NetworkNode[], width: number, height: number): Map<string, { x: number; y: number }> {
+    const n = nodes.length;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const pad = 80;
+    const cellW = (width - 2 * pad) / cols;
+    const cellH = (height - 2 * pad) / rows;
+    const out = new Map<string, { x: number; y: number }>();
+    nodes.forEach((node, i) => {
+        const c = i % cols;
+        const r = Math.floor(i / cols);
+        out.set(node.id, {
+            x: pad + (c + 0.5) * cellW,
+            y: pad + (r + 0.5) * cellH,
+        });
+    });
+    return out;
+}
+
 export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLensProps): JSX.Element {
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
     const [hoveredNode, setHoveredNode] = useState<string | null>(null);
     const [selectedNode, setSelectedNode] = useState<string | null>(null);
-    const animFrameRef = useRef<number>(0);
 
-    // Auto-size canvas
     useEffect(() => {
         const container = containerRef.current;
         if (container === null) return;
-
         const observer = new ResizeObserver((entries) => {
             const entry = entries[0];
             if (entry !== undefined) {
@@ -91,7 +121,6 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
         return () => { observer.disconnect(); };
     }, []);
 
-    // Node positions map
     const nodeMap = useMemo(() => {
         const map = new Map<string, NetworkNode>();
         for (const node of nodes) {
@@ -100,165 +129,273 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
         return map;
     }, [nodes]);
 
-    // Render loop
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (canvas === null) return;
-        const ctx = canvas.getContext('2d');
-        if (ctx === null) return;
-
-        let running = true;
-
-        function draw(): void {
-            if (!running || ctx === null || canvas === null) return;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw edges
-            for (const edge of edges) {
-                const from = nodeMap.get(edge.from);
-                const to = nodeMap.get(edge.to);
-                if (from === undefined || to === undefined) continue;
-
-                ctx.beginPath();
-                ctx.moveTo(from.x, from.y);
-                ctx.lineTo(to.x, to.y);
-                ctx.strokeStyle = '#21262d';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-
-                if (edge.label !== undefined) {
-                    const mx = (from.x + to.x) / 2;
-                    const my = (from.y + to.y) / 2;
-                    ctx.fillStyle = '#555';
-                    ctx.font = '10px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(edge.label, mx, my - 4);
-                }
-            }
-
-            // Draw traffic animations
-            const now = Date.now();
-            for (const flow of traffic) {
-                const from = nodeMap.get(flow.from);
-                const to = nodeMap.get(flow.to);
-                if (from === undefined || to === undefined) continue;
-
-                const age = now - flow.timestamp;
-                const progress = Math.min(1, age / 1500);
-                const x = from.x + (to.x - from.x) * progress;
-                const y = from.y + (to.y - from.y) * progress;
-
-                ctx.beginPath();
-                ctx.arc(x, y, 3 + flow.size / 500, 0, Math.PI * 2);
-                ctx.fillStyle = flow.protocol === 'tcp' ? '#00aaff' : flow.protocol === 'udp' ? '#f1fa8c' : '#bd93f9';
-                ctx.globalAlpha = 1 - progress * 0.7;
-                ctx.fill();
-                ctx.globalAlpha = 1;
-            }
-
-            // Draw nodes
-            for (const node of nodes) {
-                const isHovered = hoveredNode === node.id;
-                const isSelected = selectedNode === node.id;
-                const radius = isHovered || isSelected ? NODE_RADIUS + 4 : NODE_RADIUS;
-
-                // Glow for compromised
-                if (node.status === 'compromised') {
-                    ctx.beginPath();
-                    ctx.arc(node.x, node.y, radius + 8, 0, Math.PI * 2);
-                    ctx.fillStyle = 'rgba(255, 85, 85, 0.15)';
-                    ctx.fill();
-                }
-
-                // Node circle
-                ctx.beginPath();
-                ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-                ctx.fillStyle = isSelected ? '#1c2128' : '#0d1117';
-                ctx.fill();
-                ctx.strokeStyle = STATUS_COLORS[node.status];
-                ctx.lineWidth = isSelected ? 2.5 : 1.5;
-                ctx.stroke();
-
-                // Icon
-                ctx.fillStyle = STATUS_COLORS[node.status];
-                ctx.font = '14px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(TYPE_ICONS[node.type], node.x, node.y);
-
-                // Label
-                ctx.fillStyle = isHovered ? '#e6edf3' : '#8b949e';
-                ctx.font = '11px monospace';
-                ctx.textBaseline = 'top';
-                ctx.fillText(node.label, node.x, node.y + radius + 4);
-
-                // IP
-                ctx.fillStyle = '#555';
-                ctx.font = '9px monospace';
-                ctx.fillText(node.ip, node.x, node.y + radius + 17);
-            }
-
-            animFrameRef.current = requestAnimationFrame(draw);
-        }
-
-        draw();
-
-        return () => {
-            running = false;
-            cancelAnimationFrame(animFrameRef.current);
-        };
-    }, [nodes, edges, traffic, nodeMap, hoveredNode, selectedNode, dimensions]);
-
-    // Hit-test mouse events
-    const findNodeAt = useCallback((clientX: number, clientY: number): NetworkNode | null => {
-        const canvas = canvasRef.current;
-        if (canvas === null) return null;
-        const rect = canvas.getBoundingClientRect();
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
-
-        for (const node of nodes) {
-            const dx = node.x - x;
-            const dy = node.y - y;
-            if (dx * dx + dy * dy < (NODE_RADIUS + 4) ** 2) {
-                return node;
-            }
-        }
-        return null;
+    const hasRealPositions = useMemo(() => {
+        if (nodes.length === 0) return false;
+        const first = nodes[0]!;
+        const same = nodes.every((n) => n.x === first.x && n.y === first.y);
+        const allZero = nodes.every((n) => n.x === 0 && n.y === 0);
+        return !allZero && !same;
     }, [nodes]);
 
-    const handleMouseMove = useCallback((e: React.MouseEvent) => {
-        const node = findNodeAt(e.clientX, e.clientY);
-        setHoveredNode(node?.id ?? null);
-    }, [findNodeAt]);
+    const positions = useMemo(() => {
+        if (hasRealPositions) {
+            const map = new Map<string, { x: number; y: number }>();
+            for (const node of nodes) {
+                map.set(node.id, { x: node.x, y: node.y });
+            }
+            return map;
+        }
+        return gridLayout(nodes, dimensions.width, dimensions.height);
+    }, [nodes, hasRealPositions, dimensions.width, dimensions.height]);
 
-    const handleClick = useCallback((e: React.MouseEvent) => {
-        const node = findNodeAt(e.clientX, e.clientY);
-        setSelectedNode(node?.id ?? null);
-    }, [findNodeAt]);
+    const bounds = useMemo(() => {
+        if (positions.size === 0) {
+            return { minX: 0, minY: 0, maxX: dimensions.width, maxY: dimensions.height };
+        }
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        positions.forEach(({ x, y }) => {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        });
+        const pad = 100;
+        return {
+            minX: minX - pad,
+            minY: minY - pad,
+            maxX: maxX + pad,
+            maxY: maxY + pad,
+        };
+    }, [positions, dimensions]);
+
+    const viewBox = useMemo(() => {
+        const { minX, minY, maxX, maxY } = bounds;
+        const w = Math.max(100, maxX - minX);
+        const h = Math.max(100, maxY - minY);
+        return `${minX} ${minY} ${w} ${h}`;
+    }, [bounds]);
+
+    const segments = useMemo(() => {
+        const bySubnet = new Map<string, string[]>();
+        for (const node of nodes) {
+            const seg = subnetFromIp(node.ip);
+            const list = bySubnet.get(seg) ?? [];
+            list.push(node.id);
+            bySubnet.set(seg, list);
+        }
+        return Array.from(bySubnet.entries()).map(([subnet, nodeIds]) => ({ name: subnet, nodeIds }));
+    }, [nodes]);
+
+    const segmentRects = useMemo(() => {
+        return segments.map((seg) => {
+            const pts = seg.nodeIds
+                .map((id) => positions.get(id))
+                .filter((p): p is { x: number; y: number } => p !== undefined);
+            if (pts.length === 0) return null;
+            const minX = Math.min(...pts.map((p) => p.x)) - NODE_WIDTH / 2 - 16;
+            const maxX = Math.max(...pts.map((p) => p.x)) + NODE_WIDTH / 2 + 16;
+            const minY = Math.min(...pts.map((p) => p.y)) - NODE_HEIGHT / 2 - 16;
+            const maxY = Math.max(...pts.map((p) => p.y)) + NODE_HEIGHT / 2 + 16;
+            return { name: seg.name, x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        }).filter((r): r is NonNullable<typeof r> => r !== null);
+    }, [segments, positions]);
+
+    const getNodeBorder = useCallback((node: NetworkNode): string => {
+        if (node.status === 'compromised') return BORDER_COMPROMISED;
+        if (node.type === 'attacker') return BORDER_PLAYER;
+        return BORDER_TARGET;
+    }, []);
 
     const selectedInfo = selectedNode !== null ? nodeMap.get(selectedNode) ?? null : null;
 
     return (
         <div style={rootStyle}>
             <div style={toolbarStyle}>
-                <span style={{ color: '#D4A03A', fontWeight: 600 }}>NETWORK MAP</span>
-                <span style={{ color: '#8b949e' }}>
+                <span style={{ color: BORDER_PLAYER, fontWeight: 600 }}>NETWORK MAP</span>
+                <span style={{ color: TEXT_SECONDARY }}>
                     {nodes.length} nodes | {edges.length} links | {traffic.length} flows
                 </span>
             </div>
 
             <div ref={containerRef} style={canvasContainerStyle}>
-                <canvas
-                    ref={canvasRef}
-                    width={dimensions.width}
-                    height={dimensions.height}
-                    onMouseMove={handleMouseMove}
-                    onClick={handleClick}
-                    style={{ cursor: hoveredNode !== null ? 'pointer' : 'default' }}
+                <svg
+                    width="100%"
+                    height="100%"
+                    viewBox={viewBox}
+                    preserveAspectRatio="xMidYMid meet"
+                    style={{ display: 'block', background: BG_MAP }}
                     data-focused={focused}
-                />
+                >
+                    <defs>
+                        <filter id="node-glow-compromised" x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+                            <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
+                        <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#383838" />
+                            <stop offset="100%" stopColor="#505050" />
+                        </linearGradient>
+                    </defs>
+
+                    {/* Segment background groups */}
+                    <g aria-hidden>
+                        {segmentRects.map((r, _i) => (
+                            <g key={r.name}>
+                                <rect
+                                    x={r.x}
+                                    y={r.y}
+                                    width={r.width}
+                                    height={r.height}
+                                    fill="rgba(255,255,255,0.02)"
+                                    stroke="rgba(255,255,255,0.06)"
+                                    strokeWidth="1"
+                                    rx="8"
+                                />
+                                <text
+                                    x={r.x + 8}
+                                    y={r.y + 14}
+                                    fill={TEXT_SECONDARY}
+                                    fontSize="10"
+                                    fontFamily="var(--font-mono, monospace)"
+                                >
+                                    {r.name}/24
+                                </text>
+                            </g>
+                        ))}
+                    </g>
+
+                    {/* Edges */}
+                    <g stroke="#383838" strokeWidth="1.5" fill="none">
+                        {edges.map((edge, i) => {
+                            const from = positions.get(edge.from);
+                            const to = positions.get(edge.to);
+                            if (from === undefined || to === undefined) return null;
+                            const midX = (from.x + to.x) / 2;
+                            const midY = (from.y + to.y) / 2;
+                            return (
+                                <g key={`edge-${edge.from}-${edge.to}-${i}`}>
+                                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
+                                    {edge.label !== undefined && (
+                                        <text
+                                            x={midX}
+                                            y={midY - 4}
+                                            fill={TEXT_SECONDARY}
+                                            fontSize="9"
+                                            textAnchor="middle"
+                                            fontFamily="var(--font-mono, monospace)"
+                                        >
+                                            {edge.label}
+                                        </text>
+                                    )}
+                                </g>
+                            );
+                        })}
+                    </g>
+
+                    {/* Traffic flow dots (animated along edges) */}
+                    <g fill="none" strokeWidth="0">
+                        {traffic.map((flow) => {
+                            const from = positions.get(flow.from);
+                            const to = positions.get(flow.to);
+                            if (from === undefined || to === undefined) return null;
+                            const dur = 1.2 + (flow.size % 800) / 1000;
+                            const color = flow.protocol === 'tcp' ? '#4A9EFF' : flow.protocol === 'udp' ? '#f1fa8c' : '#bd93f9';
+                            return (
+                                <g key={flow.id}>
+                                    <circle r={3 + Math.min(2, flow.size / 500)} fill={color} opacity={0.9}>
+                                        <animateMotion
+                                            dur={`${dur}s`}
+                                            repeatCount="indefinite"
+                                            path={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
+                                        />
+                                    </circle>
+                                </g>
+                            );
+                        })}
+                    </g>
+
+                    {/* Nodes */}
+                    {nodes.map((node) => {
+                        const pos = positions.get(node.id);
+                        if (pos === undefined) return null;
+                        const isHovered = hoveredNode === node.id;
+                        const isSelected = selectedNode === node.id;
+                        const border = getNodeBorder(node);
+                        const glow = node.status === 'compromised';
+                        const w = NODE_WIDTH;
+                        const h = NODE_HEIGHT;
+                        return (
+                            <g
+                                key={node.id}
+                                transform={`translate(${pos.x}, ${pos.y})`}
+                                style={{ cursor: 'pointer' }}
+                                onMouseEnter={() => setHoveredNode(node.id)}
+                                onMouseLeave={() => setHoveredNode(null)}
+                                onClick={() => setSelectedNode((prev) => (prev === node.id ? null : node.id))}
+                            >
+                                {glow && (
+                                    <rect
+                                        x={-w / 2 - 6}
+                                        y={-h / 2 - 6}
+                                        width={w + 12}
+                                        height={h + 12}
+                                        rx={NODE_RX + 4}
+                                        fill="rgba(199, 84, 80, 0.12)"
+                                        filter="url(#node-glow-compromised)"
+                                    />
+                                )}
+                                <rect
+                                    x={-w / 2}
+                                    y={-h / 2}
+                                    width={w}
+                                    height={h}
+                                    rx={NODE_RX}
+                                    fill={isSelected ? '#161b22' : '#0d1117'}
+                                    stroke={border}
+                                    strokeWidth={isHovered || isSelected ? 2.5 : 1.5}
+                                />
+                                <text
+                                    textAnchor="middle"
+                                    dominantBaseline="central"
+                                    fill={border}
+                                    fontSize="14"
+                                    fontFamily="sans-serif"
+                                >
+                                    {TYPE_ICONS[node.type]}
+                                </text>
+                                <text
+                                    y={h / 2 + 12}
+                                    textAnchor="middle"
+                                    fill={isHovered ? TEXT_PRIMARY : TEXT_SECONDARY}
+                                    fontSize="10"
+                                    fontFamily="var(--font-mono, monospace)"
+                                >
+                                    {node.label}
+                                </text>
+                                <text
+                                    y={h / 2 + 24}
+                                    textAnchor="middle"
+                                    fill={TEXT_SECONDARY}
+                                    fontSize="9"
+                                    fontFamily="var(--font-mono, monospace)"
+                                >
+                                    {node.ip}
+                                </text>
+                            </g>
+                        );
+                    })}
+                </svg>
+            </div>
+
+            {/* Legend */}
+            <div style={legendStyle}>
+                <span style={legendTitleStyle}>Node types</span>
+                <span style={{ borderColor: BORDER_PLAYER, ...legendItemStyle }}>Player</span>
+                <span style={{ borderColor: BORDER_TARGET, ...legendItemStyle }}>Target</span>
+                <span style={{ borderColor: BORDER_COMPROMISED, ...legendItemStyle }}>Compromised</span>
             </div>
 
             {selectedInfo !== null && (
@@ -266,17 +403,19 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                         <span style={{ fontSize: '1.2rem' }}>{TYPE_ICONS[selectedInfo.type]}</span>
                         <div>
-                            <div style={{ fontWeight: 600, color: '#e6edf3' }}>{selectedInfo.label}</div>
-                            <div style={{ color: '#8b949e' }}>{selectedInfo.ip}</div>
+                            <div style={{ fontWeight: 600, color: TEXT_PRIMARY }}>{selectedInfo.label}</div>
+                            <div style={{ color: TEXT_SECONDARY }}>{selectedInfo.ip}</div>
                         </div>
-                        <span style={{
-                            marginLeft: 'auto',
-                            padding: '2px 8px',
-                            border: `1px solid ${STATUS_COLORS[selectedInfo.status]}40`,
-                            color: STATUS_COLORS[selectedInfo.status],
-                            fontSize: '0.7rem',
-                            borderRadius: '3px',
-                        }}>
+                        <span
+                            style={{
+                                marginLeft: 'auto',
+                                padding: '2px 8px',
+                                border: `1px solid ${getNodeBorder(selectedInfo)}40`,
+                                color: getNodeBorder(selectedInfo),
+                                fontSize: '0.7rem',
+                                borderRadius: '3px',
+                            }}
+                        >
                             {selectedInfo.status.toUpperCase()}
                         </span>
                     </div>
@@ -290,8 +429,8 @@ const rootStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    background: '#0a0e14',
-    color: '#e6edf3',
+    background: BG_MAP,
+    color: TEXT_PRIMARY,
     fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
     fontSize: '0.75rem',
 };
@@ -310,6 +449,28 @@ const canvasContainerStyle: React.CSSProperties = {
     flex: 1,
     overflow: 'hidden',
     position: 'relative',
+};
+
+const legendStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '6px 10px',
+    borderTop: '1px solid #21262d',
+    background: '#0d1117',
+    fontSize: '0.7rem',
+};
+
+const legendTitleStyle: React.CSSProperties = {
+    color: TEXT_SECONDARY,
+    fontWeight: 600,
+    marginRight: '4px',
+};
+
+const legendItemStyle: React.CSSProperties = {
+    padding: '2px 8px',
+    borderLeft: '3px solid',
+    color: TEXT_PRIMARY,
 };
 
 const detailsPanelStyle: React.CSSProperties = {
