@@ -688,7 +688,7 @@ function SimulationScreen({
     // ── Compositor state ────────────────────────────────────────
     const [compositorState, dispatchCompositor] = useReducer(compositorReducer, undefined, createInitialState);
 
-    const { notifications, dismissNotification, clearAll } = useNotifications();
+    const { notifications, addNotification, dismissNotification, clearAll } = useNotifications();
     const { registerShortcut } = useKeyboardShortcuts();
 
     const [helpOverlayVisible, setHelpOverlayVisible] = useState(false);
@@ -1052,8 +1052,11 @@ function SimulationScreen({
         const sim = simulationRef.current;
         const unsubs: (() => void)[] = [];
         if (sim !== null) {
-            unsubs.push(sim.events.on('objective:complete', () => {
+            unsubs.push(sim.events.on('objective:complete', (event) => {
                 setSimState(sim.getState());
+                const obj = worldSpec?.objectives.find(o => o.id === event.objectiveId);
+                const label = obj?.title ?? event.objectiveId;
+                addNotification('success', 'Objective Complete', label, { timeout: 5000 });
             }));
             unsubs.push(sim.events.on('objective:progress', () => {
                 setSimState(sim.getState());
@@ -1069,7 +1072,7 @@ function SimulationScreen({
             clearInterval(interval);
             for (const unsub of unsubs) unsub();
         };
-    }, [terminalIO]); // Re-subscribe when terminal connects (sim is ready)
+    }, [terminalIO, worldSpec, addNotification]); // Re-subscribe when terminal connects (sim is ready)
 
     // ── Browser navigation handler ──────────────────────────────
     // Routes HTTP requests through the fabric's registered external
@@ -1176,8 +1179,11 @@ function SimulationScreen({
         if (hint !== null) {
             setLastHint(hint);
             setSimState(sim.getState());
+            addNotification('info', 'Hint', hint, { timeout: 8000 });
+        } else {
+            addNotification('warning', 'No Hints', 'All hints have been used.', { timeout: 3000 });
         }
-    }, []);
+    }, [addNotification]);
 
     // ── Render lens by type ─────────────────────────────────────
     const renderLens = useCallback((lens: LensInstance, focused: boolean): JSX.Element => {
@@ -1472,7 +1478,16 @@ function StatusBar({
                             {'\u25CF'} {simState.phase.toUpperCase()}
                         </span>
                         <span>{formatTime(simState.elapsedMs)}</span>
-                        <span>Score: {simState.score}</span>
+                        <span style={{
+                            color: '#D4A03A',
+                            fontWeight: 600,
+                            padding: '1px 6px',
+                            borderRadius: '3px',
+                            background: 'rgba(212, 160, 58, 0.1)',
+                            border: '1px solid rgba(212, 160, 58, 0.2)',
+                        }}>
+                            {simState.score} pts
+                        </span>
                     </>
                 )}
             </div>

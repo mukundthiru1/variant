@@ -31,9 +31,19 @@ type ComposePrefill = {
 
 const FOLDERS: readonly MailFolder[] = ['inbox', 'sent', 'drafts', 'spam'];
 
+function normalizeSubjectForThread(subject: string): string {
+    const trimmed = subject.trim();
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith('re:')) return normalizeSubjectForThread(trimmed.slice(3).trim());
+    if (lower.startsWith('fwd:')) return normalizeSubjectForThread(trimmed.slice(4).trim());
+    if (lower.startsWith('fw:')) return normalizeSubjectForThread(trimmed.slice(3).trim());
+    return trimmed.length > 0 ? trimmed : subject;
+}
+
 export function EmailLens({ account, emails, onSend, onMarkRead, focused }: EmailLensProps): JSX.Element {
     const [activeFolder, setActiveFolder] = useState<MailFolder>('inbox');
     const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
     const [showCompose, setShowCompose] = useState(false);
     const [composeTo, setComposeTo] = useState('');
     const [composeSubject, setComposeSubject] = useState('');
@@ -59,21 +69,68 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
         return [...filtered].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
     }, [emails, activeFolder]);
 
+    const folderEmailsFiltered = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (q === '') return folderEmails;
+        return folderEmails.filter(email => {
+            const from = email.from.toLowerCase();
+            const to = email.to.toLowerCase();
+            const subj = email.subject.toLowerCase();
+            const bodyPlain = toPlainText(email.body).toLowerCase();
+            return from.includes(q) || to.includes(q) || subj.includes(q) || bodyPlain.includes(q);
+        });
+    }, [folderEmails, searchQuery]);
+
+    type EmailThread = { normalizedSubject: string; displaySubject: string; emails: EmailMessage[] };
+    const threads = useMemo((): EmailThread[] => {
+        const bySubject = new Map<string, EmailMessage[]>();
+        for (const email of folderEmailsFiltered) {
+            const key = normalizeSubjectForThread(email.subject);
+            const list = bySubject.get(key) ?? [];
+            list.push(email);
+            bySubject.set(key, list);
+        }
+        const result: EmailThread[] = [];
+        bySubject.forEach((list, normalizedSubject) => {
+            const sorted = [...list].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+            const displaySubject = sorted[0]!.subject;
+            result.push({ normalizedSubject, displaySubject, emails: sorted });
+        });
+        result.sort((a, b) => {
+            const dateA = a.emails[0] ? Date.parse(a.emails[0].date) : 0;
+            const dateB = b.emails[0] ? Date.parse(b.emails[0].date) : 0;
+            return dateB - dateA;
+        });
+        return result;
+    }, [folderEmailsFiltered]);
+
     const selectedEmail = useMemo(() => {
         if (selectedEmailId === null) return null;
         return folderEmails.find(email => email.id === selectedEmailId) ?? null;
     }, [folderEmails, selectedEmailId]);
 
+    const selectedThread = useMemo((): EmailThread | null => {
+        if (selectedEmail === null) return null;
+        const key = normalizeSubjectForThread(selectedEmail.subject);
+        for (const thread of threads) {
+            if (thread.normalizedSubject === key && thread.emails.some(e => e.id === selectedEmail.id))
+                return thread;
+        }
+        return null;
+    }, [selectedEmail, threads]);
+
     useEffect(() => {
-        if (folderEmails.length === 0) {
+        if (folderEmailsFiltered.length === 0) {
             setSelectedEmailId(null);
             return;
         }
-        const hasSelection = selectedEmailId !== null && folderEmails.some(email => email.id === selectedEmailId);
+        const idsInFiltered = new Set(folderEmailsFiltered.map(e => e.id));
+        const hasSelection = selectedEmailId !== null && idsInFiltered.has(selectedEmailId);
         if (!hasSelection) {
-            setSelectedEmailId(folderEmails[0]!.id);
+            const firstThreadLatest = threads[0]?.emails[0];
+            setSelectedEmailId(firstThreadLatest ? firstThreadLatest.id : null);
         }
-    }, [folderEmails, selectedEmailId]);
+    }, [folderEmailsFiltered, threads, selectedEmailId]);
 
     useEffect(() => {
         if (selectedEmail !== null && !selectedEmail.read) {
@@ -148,8 +205,8 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
         <div style={rootStyle}>
             <aside style={sidebarStyle}>
                 <div style={accountStyle}>
-                    <div style={{ color: 'var(--green-base, #D4A03A)', fontWeight: 600 }}>MAIL</div>
-                    <div style={{ color: 'var(--text-secondary, #8b949e)' }}>{account}</div>
+                    <div style={{ color: '#D4A03A', fontWeight: 600 }}>MAIL</div>
+                    <div style={{ color: '#9ca3af' }}>{account}</div>
                 </div>
                 <button onClick={handleStartCompose} style={composeButtonStyle}>Compose</button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -163,56 +220,79 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
                             style={{
                                 ...folderButtonStyle,
                                 background: activeFolder === folder ? 'rgba(212, 160, 58, 0.12)' : 'transparent',
-                                color: activeFolder === folder ? 'var(--green-base, #D4A03A)' : 'var(--text-primary, #e6edf3)',
+                                color: activeFolder === folder ? '#D4A03A' : '#e0e0e0',
                                 borderColor: activeFolder === folder ? 'rgba(212, 160, 58, 0.45)' : 'transparent',
                             }}
                         >
                             <span>{folderName(folder)}</span>
-                            <span style={{ color: 'var(--text-secondary, #8b949e)', fontSize: '0.7rem' }}>{folderCounts[folder]}</span>
+                            <span style={{ color: '#9ca3af', fontSize: '0.7rem' }}>{folderCounts[folder]}</span>
                         </button>
                     ))}
                 </div>
             </aside>
 
             <section style={listPanelStyle}>
+                <div style={searchBarWrapStyle}>
+                    <input
+                        type="text"
+                        placeholder="Search mail…"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={searchInputStyle}
+                        aria-label="Search emails"
+                    />
+                </div>
                 <div style={panelHeaderStyle}>
                     <span>{folderName(activeFolder)}</span>
-                    <span style={{ color: 'var(--text-secondary, #8b949e)' }}>{folderEmails.length} messages</span>
+                    <span style={{ color: 'var(--text-secondary, #e0e0e0)' }}>{folderEmailsFiltered.length} messages</span>
                 </div>
                 <div style={listBodyStyle}>
                     {folderEmails.length === 0 && (
                         <div style={emptyStateStyle}>No messages in {folderName(activeFolder).toLowerCase()}.</div>
                     )}
-                    {folderEmails.map(email => (
-                        <button
-                            key={email.id}
-                            onClick={() => {
-                                setSelectedEmailId(email.id);
-                                setShowCompose(false);
-                            }}
-                            style={{
-                                ...emailRowStyle,
-                                background: selectedEmailId === email.id ? 'rgba(212, 160, 58, 0.08)' : 'transparent',
-                                borderLeft: selectedEmailId === email.id
-                                    ? '2px solid var(--green-base, #D4A03A)'
-                                    : '2px solid transparent',
-                                fontWeight: email.read ? 400 : 600,
-                            }}
-                        >
-                            <div style={emailRowTopStyle}>
-                                <span style={{ color: email.read ? 'var(--text-secondary, #8b949e)' : 'var(--text-primary, #e6edf3)' }}>
-                                    {activeFolder === 'sent' ? `To: ${email.to}` : email.from}
-                                </span>
-                                <span style={{ color: 'var(--text-secondary, #8b949e)', fontSize: '0.67rem' }}>{formatDate(email.date)}</span>
-                            </div>
-                            <div style={emailRowBottomStyle}>
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email.subject}</span>
-                                {email.attachments !== undefined && email.attachments.length > 0 && (
-                                    <span title={`${email.attachments.length} attachment(s)`} style={{ color: '#b4bcd0', fontSize: '0.8rem' }}>📎</span>
-                                )}
-                            </div>
-                        </button>
-                    ))}
+                    {folderEmails.length > 0 && threads.length === 0 && (
+                        <div style={emptyStateStyle}>No messages match your search.</div>
+                    )}
+                    {threads.map(thread => {
+                        const latest = thread.emails[0]!;
+                        const hasUnread = thread.emails.some(e => !e.read);
+                        const isSelected = selectedEmailId === latest.id || thread.emails.some(e => e.id === selectedEmailId);
+                        return (
+                            <button
+                                key={thread.normalizedSubject + latest.id}
+                                onClick={() => {
+                                    setSelectedEmailId(latest.id);
+                                    setShowCompose(false);
+                                }}
+                                style={{
+                                    ...emailRowStyle,
+                                    background: isSelected ? 'rgba(212, 160, 58, 0.12)' : 'transparent',
+                                    borderLeft: isSelected
+                                        ? '3px solid #D4A03A'
+                                        : '3px solid transparent',
+                                    fontWeight: hasUnread ? 700 : 400,
+                                }}
+                            >
+                                <div style={emailRowTopStyle}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                                        {hasUnread && <span style={unreadDotStyle} aria-hidden />}
+                                        <span style={{ color: hasUnread ? '#e0e0e0' : 'var(--text-secondary, #9ca3af)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {activeFolder === 'sent' ? `To: ${latest.to}` : latest.from}
+                                        </span>
+                                    </span>
+                                    <span style={{ color: 'var(--text-secondary, #9ca3af)', fontSize: '0.67rem', flexShrink: 0 }}>{formatDate(latest.date)}</span>
+                                </div>
+                                <div style={emailRowBottomStyle}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: hasUnread ? '#e0e0e0' : 'var(--text-secondary, #9ca3af)' }}>{thread.displaySubject}</span>
+                                    {thread.emails.length > 1 ? (
+                                        <span style={{ color: '#D4A03A', fontSize: '0.68rem', flexShrink: 0 }}>{thread.emails.length}</span>
+                                    ) : latest.attachments !== undefined && latest.attachments.length > 0 ? (
+                                        <span title={`${latest.attachments.length} attachment(s)`} style={{ color: '#9ca3af', fontSize: '0.8rem' }}>📎</span>
+                                    ) : null}
+                                </div>
+                            </button>
+                        );
+                    })}
                 </div>
             </section>
 
@@ -221,7 +301,7 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span>{showCompose ? 'Compose' : 'Message'}</span>
                         {composeOrigin !== 'new' && showCompose && (
-                            <span style={{ color: 'var(--text-secondary, #8b949e)', fontSize: '0.67rem' }}>
+                            <span style={{ color: '#9ca3af', fontSize: '0.67rem' }}>
                                 {composeOrigin === 'reply' ? 'Reply' : 'Forward'}
                             </span>
                         )}
@@ -272,11 +352,33 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
                     </form>
                 ) : selectedEmail !== null ? (
                     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                        {selectedThread !== null && selectedThread.emails.length > 1 && (
+                            <div style={threadSiblingsStyle}>
+                                <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 600 }}>Thread ({selectedThread.emails.length})</span>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                    {selectedThread.emails.map(em => (
+                                        <button
+                                            key={em.id}
+                                            type="button"
+                                            onClick={() => setSelectedEmailId(em.id)}
+                                            style={{
+                                                ...threadSiblingButtonStyle,
+                                                background: selectedEmailId === em.id ? 'rgba(212, 160, 58, 0.2)' : 'rgba(255,255,255,0.06)',
+                                                borderColor: selectedEmailId === em.id ? '#D4A03A' : 'transparent',
+                                            }}
+                                        >
+                                            {formatDate(em.date)} — {em.from}
+                                            {!em.read && <span style={unreadDotStyle} aria-hidden />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <div style={messageMetaStyle}>
-                            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary, #e6edf3)' }}>{selectedEmail.subject}</div>
-                            <div style={{ color: 'var(--text-secondary, #8b949e)' }}>From: {selectedEmail.from}</div>
-                            <div style={{ color: 'var(--text-secondary, #8b949e)' }}>To: {selectedEmail.to}</div>
-                            <div style={{ color: 'var(--text-secondary, #8b949e)' }}>{formatDate(selectedEmail.date)}</div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#e0e0e0' }}>{selectedEmail.subject}</div>
+                            <div style={{ color: '#9ca3af' }}>From: {selectedEmail.from}</div>
+                            <div style={{ color: '#9ca3af' }}>To: {selectedEmail.to}</div>
+                            <div style={{ color: '#9ca3af' }}>{formatDate(selectedEmail.date)}</div>
                             {selectedEmail.attachments !== undefined && selectedEmail.attachments.length > 0 && (
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
                                     {selectedEmail.attachments.map(att => (
@@ -338,17 +440,17 @@ function prepareEmailBodyForSandbox(rawBody: string): string {
         body {
             margin: 0;
             padding: 14px;
-            background: #0f141c;
-            color: #d4dae5;
+            background: #0a0a0a;
+            color: #e0e0e0;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace;
             line-height: 1.45;
             font-size: 13px;
         }
-        a { color: #55b7ff; }
-        blockquote { border-left: 2px solid #2a3342; margin-left: 0; padding-left: 8px; color: #9fb0c9; }
-        pre { background: #0a0e14; border: 1px solid #21262d; padding: 8px; overflow: auto; }
+        a { color: #D4A03A; }
+        blockquote { border-left: 2px solid rgba(212, 160, 58, 0.4); margin-left: 0; padding-left: 8px; color: #9ca3af; }
+        pre { background: #111; border: 1px solid rgba(224, 224, 224, 0.12); padding: 8px; overflow: auto; }
         table { border-collapse: collapse; }
-        td, th { border: 1px solid #2a3342; padding: 4px 6px; }
+        td, th { border: 1px solid rgba(224, 224, 224, 0.15); padding: 4px 6px; }
     </style></head><body>${body}</body></html>`;
 }
 
@@ -430,15 +532,15 @@ const rootStyle: React.CSSProperties = {
     gridTemplateColumns: '220px 340px 1fr',
     height: '100%',
     width: '100%',
-    background: 'var(--bg-primary, #0a0e14)',
-    color: 'var(--text-primary, #e6edf3)',
-    fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
+    background: '#0a0a0a',
+    color: '#e0e0e0',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace',
     fontSize: '0.75rem',
 };
 
 const sidebarStyle: React.CSSProperties = {
-    borderRight: '1px solid var(--border-default, #21262d)',
-    background: 'linear-gradient(180deg, #0a0e14 0%, #0d1117 100%)',
+    borderRight: '1px solid rgba(224, 224, 224, 0.12)',
+    background: 'linear-gradient(180deg, #0a0a0a 0%, #111 100%)',
     padding: '10px 8px',
     display: 'flex',
     flexDirection: 'column',
@@ -446,8 +548,8 @@ const sidebarStyle: React.CSSProperties = {
 };
 
 const accountStyle: React.CSSProperties = {
-    border: '1px solid var(--border-default, #21262d)',
-    background: 'var(--bg-secondary, #0d1117)',
+    border: '1px solid rgba(224, 224, 224, 0.12)',
+    background: '#111',
     padding: '8px',
     borderRadius: '6px',
     display: 'flex',
@@ -458,7 +560,7 @@ const accountStyle: React.CSSProperties = {
 const composeButtonStyle: React.CSSProperties = {
     background: 'rgba(212, 160, 58, 0.16)',
     border: '1px solid rgba(212, 160, 58, 0.45)',
-    color: 'var(--green-base, #D4A03A)',
+    color: '#D4A03A',
     borderRadius: '6px',
     padding: '8px 10px',
     textAlign: 'left',
@@ -481,12 +583,38 @@ const folderButtonStyle: React.CSSProperties = {
     fontSize: '0.74rem',
 };
 
+const searchBarWrapStyle: React.CSSProperties = {
+    padding: '8px 10px',
+    borderBottom: '1px solid rgba(224, 224, 224, 0.08)',
+    background: '#0a0a0a',
+};
+
+const searchInputStyle: React.CSSProperties = {
+    width: '100%',
+    background: '#111',
+    border: '1px solid rgba(224, 224, 224, 0.12)',
+    color: '#e0e0e0',
+    borderRadius: '6px',
+    padding: '8px 10px',
+    outline: 'none',
+    fontFamily: 'inherit',
+    fontSize: '0.75rem',
+};
+
+const unreadDotStyle: React.CSSProperties = {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: '#D4A03A',
+    flexShrink: 0,
+};
+
 const listPanelStyle: React.CSSProperties = {
-    borderRight: '1px solid var(--border-default, #21262d)',
+    borderRight: '1px solid rgba(224, 224, 224, 0.12)',
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
-    background: 'var(--bg-secondary, #0d1117)',
+    background: '#111',
 };
 
 const panelHeaderStyle: React.CSSProperties = {
@@ -495,8 +623,8 @@ const panelHeaderStyle: React.CSSProperties = {
     justifyContent: 'space-between',
     minHeight: '36px',
     padding: '0 10px',
-    borderBottom: '1px solid var(--border-default, #21262d)',
-    background: 'rgba(0, 0, 0, 0.15)',
+    borderBottom: '1px solid rgba(224, 224, 224, 0.12)',
+    background: 'rgba(0, 0, 0, 0.2)',
     fontSize: '0.72rem',
     letterSpacing: '0.02em',
 };
@@ -506,15 +634,37 @@ const listBodyStyle: React.CSSProperties = {
     flex: 1,
 };
 
+const threadSiblingsStyle: React.CSSProperties = {
+    padding: '8px 12px',
+    borderBottom: '1px solid rgba(224, 224, 224, 0.08)',
+    background: '#0a0a0a',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+};
+
+const threadSiblingButtonStyle: React.CSSProperties = {
+    border: '1px solid transparent',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontSize: '0.68rem',
+    color: '#e0e0e0',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+};
+
 const emailRowStyle: React.CSSProperties = {
     width: '100%',
     borderTop: 'none',
     borderRight: 'none',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+    borderBottom: '1px solid rgba(224, 224, 224, 0.06)',
     textAlign: 'left',
     cursor: 'pointer',
     padding: '8px 10px',
-    color: 'var(--text-primary, #e6edf3)',
+    color: '#e0e0e0',
     fontFamily: 'inherit',
     fontSize: '0.73rem',
 };
@@ -537,13 +687,13 @@ const readerPanelStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
-    background: '#0a0e14',
+    background: '#0a0a0a',
 };
 
 const toolbarButtonStyle: React.CSSProperties = {
-    background: 'var(--bg-elevated, #1c2128)',
-    border: '1px solid var(--border-default, #21262d)',
-    color: 'var(--text-primary, #e6edf3)',
+    background: '#111',
+    border: '1px solid rgba(224, 224, 224, 0.12)',
+    color: '#e0e0e0',
     borderRadius: '4px',
     padding: '2px 8px',
     cursor: 'pointer',
@@ -564,13 +714,13 @@ const fieldLabelStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
-    color: 'var(--text-secondary, #8b949e)',
+    color: '#9ca3af',
 };
 
 const inputStyle: React.CSSProperties = {
-    background: 'var(--bg-elevated, #1c2128)',
-    border: '1px solid var(--border-default, #21262d)',
-    color: 'var(--text-primary, #e6edf3)',
+    background: '#111',
+    border: '1px solid rgba(224, 224, 224, 0.12)',
+    color: '#e0e0e0',
     borderRadius: '5px',
     padding: '7px 8px',
     outline: 'none',
@@ -587,8 +737,8 @@ const textAreaStyle: React.CSSProperties = {
 
 const secondaryButtonStyle: React.CSSProperties = {
     background: 'transparent',
-    border: '1px solid var(--border-default, #21262d)',
-    color: 'var(--text-secondary, #8b949e)',
+    border: '1px solid rgba(224, 224, 224, 0.12)',
+    color: '#9ca3af',
     borderRadius: '5px',
     padding: '6px 10px',
     cursor: 'pointer',
@@ -597,9 +747,9 @@ const secondaryButtonStyle: React.CSSProperties = {
 };
 
 const sendButtonStyle: React.CSSProperties = {
-    background: 'var(--green-base, #D4A03A)',
+    background: '#D4A03A',
     border: '1px solid rgba(212, 160, 58, 0.85)',
-    color: '#04130a',
+    color: '#0a0a0a',
     borderRadius: '5px',
     padding: '6px 12px',
     cursor: 'pointer',
@@ -610,20 +760,20 @@ const sendButtonStyle: React.CSSProperties = {
 
 const messageMetaStyle: React.CSSProperties = {
     padding: '12px 12px 8px',
-    borderBottom: '1px solid var(--border-default, #21262d)',
+    borderBottom: '1px solid rgba(224, 224, 224, 0.12)',
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
-    background: 'var(--bg-secondary, #0d1117)',
+    background: '#111',
 };
 
 const attachmentChipStyle: React.CSSProperties = {
-    background: 'rgba(255, 255, 255, 0.04)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    background: 'rgba(255, 255, 255, 0.06)',
+    border: '1px solid rgba(224, 224, 224, 0.1)',
     borderRadius: '4px',
     padding: '2px 6px',
     fontSize: '0.67rem',
-    color: '#b4bcd0',
+    color: '#9ca3af',
 };
 
 const messageBodyFrameStyle: React.CSSProperties = {
@@ -631,11 +781,11 @@ const messageBodyFrameStyle: React.CSSProperties = {
     width: '100%',
     flex: 1,
     minHeight: 0,
-    background: '#0f141c',
+    background: '#0a0a0a',
 };
 
 const emptyStateStyle: React.CSSProperties = {
-    color: 'var(--text-secondary, #8b949e)',
+    color: '#9ca3af',
     fontSize: '0.74rem',
     padding: '16px',
 };

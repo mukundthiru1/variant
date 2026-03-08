@@ -115,13 +115,14 @@ function SectionSub({ children }: { children: ReactNode }): JSX.Element {
 
 // ── Landing Page ────────────────────────────────────────────────
 
-const VERSION = 'v1.0.0';
+const VERSION = 'v0.1.0';
 
 const TAGLINE = 'Boot real Linux in your browser. Attack real protocols. Complete objectives. No servers. No data leaves your machine.';
 
 export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: LandingPageProps): JSX.Element {
     const [displayedTagline, setDisplayedTagline] = useState('');
     const [showGlow, setShowGlow] = useState(true);
+    const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
 
     useEffect(() => {
         let index = 0;
@@ -143,12 +144,42 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const levelCount = (SAMPLE_LEVELS as readonly unknown[]).length;
+            if (levelCount === 0) return;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedLevel(prev => prev === null ? 0 : Math.min(prev + 1, levelCount - 1));
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedLevel(prev => prev === null ? 0 : Math.max(prev - 1, 0));
+            } else if (e.key === 'Enter' && selectedLevel !== null) {
+                e.preventDefault();
+                onMarketplace();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedLevel, onMarketplace]);
+
     return (
-        <div style={{ background: C.bg, color: C.text, fontFamily: FONT_BODY, minHeight: '100vh', overflowX: 'hidden', scrollBehavior: 'smooth' }}>
+        <div className="animated-grid" style={{ background: C.bg, color: C.text, fontFamily: FONT_BODY, minHeight: '100vh', overflowX: 'hidden', scrollBehavior: 'smooth' }}>
             <style>{`
                 @keyframes blink {
                     0%, 100% { opacity: 1; }
                     50% { opacity: 0; }
+                }
+                @keyframes gridScroll {
+                    0% { background-position: 0 0; }
+                    100% { background-position: 60px 60px; }
+                }
+                .animated-grid {
+                    background-image: 
+                        linear-gradient(rgba(212, 160, 58, 0.05) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(212, 160, 58, 0.05) 1px, transparent 1px);
+                    background-size: 60px 60px;
+                    animation: gridScroll 20s linear infinite;
                 }
             `}</style>
             {/* NAV */}
@@ -319,18 +350,30 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                 <SectionTitle>Scenarios</SectionTitle>
                 <SectionSub>From first exploit to full red-team engagement.</SectionSub>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center' }}>
-                    {SAMPLE_LEVELS.map((level) => (
+                    {SAMPLE_LEVELS.map((level, index) => (
                         <div key={level.id} role="button" tabIndex={0}
                             style={{
-                                border: `1px solid ${C.border}`, borderRadius: '2px',
+                                border: selectedLevel === index ? `1px solid ${C.signal}60` : `1px solid ${C.border}`, 
+                                borderRadius: '2px',
                                 padding: '1.25rem 1.5rem', background: C.bg,
                                 flex: '1 1 280px', minWidth: 0, maxWidth: '360px', cursor: 'pointer',
-                                transition: 'border-color 200ms ease',
+                                transition: 'border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease',
+                                transform: selectedLevel === index ? 'scale(1.02)' : 'scale(1)',
+                                boxShadow: selectedLevel === index ? `0 0 20px ${C.signalGlow}` : 'none',
                             }}
                             onClick={onMarketplace}
+                            onFocus={() => setSelectedLevel(index)}
                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onMarketplace(); } }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = `${C.signal}40`; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}
+                            onMouseEnter={e => { 
+                                e.currentTarget.style.borderColor = `${C.signal}40`; 
+                                e.currentTarget.style.transform = 'scale(1.02)';
+                                e.currentTarget.style.boxShadow = `0 0 16px ${C.signalGlow}`;
+                            }}
+                            onMouseLeave={e => { 
+                                e.currentTarget.style.borderColor = selectedLevel === index ? `${C.signal}60` : C.border; 
+                                e.currentTarget.style.transform = selectedLevel === index ? 'scale(1.02)' : 'scale(1)';
+                                e.currentTarget.style.boxShadow = selectedLevel === index ? `0 0 20px ${C.signalGlow}` : 'none';
+                            }}
                         >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                                 <span style={{ fontFamily: FONT_MONO, color: C.signal, fontSize: '0.65rem', fontWeight: 500, letterSpacing: '0.04em' }}>
