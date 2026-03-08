@@ -611,10 +611,11 @@ function MenuScreen({
                             padding: '18px',
                             background: '#111111',
                             cursor: 'pointer',
-                            transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease',
+                            transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.4s ease',
                             textAlign: 'left',
                             color: 'inherit',
                             fontFamily: 'inherit',
+                            animation: `fadeInUp 0.4s ease ${index * 0.06}s both`,
                         }}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.borderColor = 'rgba(212, 160, 58, 0.6)';
@@ -634,8 +635,8 @@ function MenuScreen({
                             <span style={{
                                 fontSize: '0.65rem',
                                 padding: '2px 8px',
-                                border: '1px solid rgba(212, 160, 58, 0.45)',
-                                color: '#D4A03A',
+                                border: `1px solid ${level.difficulty === 'BEGINNER' ? 'rgba(34, 197, 94, 0.45)' : level.difficulty === 'EXPERT' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(212, 160, 58, 0.45)'}`,
+                                color: level.difficulty === 'BEGINNER' ? '#22c55e' : level.difficulty === 'EXPERT' ? '#ef4444' : '#D4A03A',
                                 borderRadius: '2px',
                             }}>
                                 {level.difficulty}
@@ -1463,6 +1464,7 @@ function SimulationScreen({
                 <style>{`
                     @keyframes spin { to { transform: rotate(360deg); } }
                     @keyframes bootCursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+                    @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
                 `}</style>
             </div>
         );
