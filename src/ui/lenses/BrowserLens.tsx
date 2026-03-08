@@ -15,7 +15,7 @@
  * simulation's network fabric. No real internet access.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 
 export interface BrowserLensProps {
     /** Initial URL to load. */
@@ -175,8 +175,31 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
 
     return (
         <>
-            <style>{`@keyframes browser-lens-spin { to { transform: rotate(360deg); } }`}</style>
+            <style>{`
+                @keyframes browser-lens-spin { to { transform: rotate(360deg); } }
+                @keyframes browser-lens-loading-bar {
+                    0% { transform: translateX(-100%); }
+                    50% { transform: translateX(0%); }
+                    100% { transform: translateX(100%); }
+                }
+            `}</style>
+            {loading && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: '3px',
+                        background: '#D4A03A',
+                        animation: 'browser-lens-loading-bar 1.2s ease-in-out infinite',
+                        zIndex: 10,
+                    }}
+                    aria-hidden
+                />
+            )}
             <div style={{
+            position: 'relative',
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
@@ -235,7 +258,17 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
                     )}
                 </button>
 
-                <form onSubmit={handleAddressSubmit} style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+                <form onSubmit={handleAddressSubmit} style={{ flex: 1, display: 'flex', minWidth: 0, alignItems: 'center', gap: '6px' }}>
+                    <span
+                        style={{
+                            flexShrink: 0,
+                            fontSize: '0.9rem',
+                            color: url.startsWith('https://') ? '#3DA67A' : url.startsWith('http://') ? '#f1fa8c' : 'var(--text-muted, #707070)',
+                        }}
+                        aria-hidden
+                    >
+                        {url.startsWith('https://') ? '\u{1F512}' : url.startsWith('http://') ? '\u26A0' : ''}
+                    </span>
                     <input
                         ref={addressRef}
                         type="text"
@@ -285,10 +318,10 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
                         lineHeight: 1.5,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-all',
-                        color: '#8be9fd',
                         background: '#0d1117',
+                        fontFamily: 'var(--font-mono), ui-monospace, monospace',
                     }}>
-                        {response?.body ?? ''}
+                        {highlightHtml(response?.body ?? '')}
                     </pre>
                 ) : (
                     <div
@@ -344,6 +377,87 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+const SOURCE_COLORS = {
+    tag: '#569cd6',
+    attrName: '#9cdcfe',
+    attrValue: '#ce9178',
+    comment: '#6a9955',
+    doctype: '#808080',
+    punctuation: '#d4d4d4',
+    text: '#d4d4d4',
+} as const;
+
+function highlightHtml(html: string): ReactNode {
+    if (html === '') return '';
+    const out: ReactNode[] = [];
+    let i = 0;
+    const len = html.length;
+    while (i < len) {
+        if (html.slice(i).startsWith('<!--')) {
+            const end = html.indexOf('-->', i);
+            const comment = end === -1 ? html.slice(i) : html.slice(i, end + 3);
+            out.push(<span key={i} style={{ color: SOURCE_COLORS.comment }}>{comment}</span>);
+            i += comment.length;
+            continue;
+        }
+        if (html.slice(i).startsWith('<!') && !html.slice(i).startsWith('<!--')) {
+            const close = html.indexOf('>', i);
+            const doctype = close === -1 ? html.slice(i) : html.slice(i, close + 1);
+            out.push(<span key={i} style={{ color: SOURCE_COLORS.doctype }}>{doctype}</span>);
+            i += doctype.length;
+            continue;
+        }
+        if (html[i] === '<') {
+            const tagEnd = html.indexOf('>', i);
+            const raw = tagEnd === -1 ? html.slice(i) : html.slice(i, tagEnd + 1);
+            out.push(<span key={i}>{highlightTag(raw)}</span>);
+            i += raw.length;
+            continue;
+        }
+        const nextLt = html.indexOf('<', i);
+        const textEnd = nextLt === -1 ? len : nextLt;
+        const text = html.slice(i, textEnd);
+        if (text.length > 0) {
+            out.push(<span key={i} style={{ color: SOURCE_COLORS.text }}>{text}</span>);
+        }
+        i = textEnd;
+    }
+    return <>{out}</>;
+}
+
+function highlightTag(tag: string): ReactNode {
+    const parts: ReactNode[] = [];
+    let i = 0;
+    if (tag[i] === '<') {
+        parts.push(<span key="open" style={{ color: SOURCE_COLORS.punctuation }}>{'<'}</span>);
+        i++;
+    }
+    if (tag[i] === '/') {
+        parts.push(<span key="slash" style={{ color: SOURCE_COLORS.punctuation }}>/</span>);
+        i++;
+    }
+    const nameMatch = /^[\w-]+/.exec(tag.slice(i));
+    if (nameMatch) {
+        parts.push(<span key="name" style={{ color: SOURCE_COLORS.tag }}>{nameMatch[0]}</span>);
+        i += nameMatch[0].length;
+    }
+    const rest = tag.slice(i);
+    const attrRegex = /(\s+)([\w-]+)(\s*=\s*)(["'][^"']*["']|[^\s>]+)/g;
+    let lastIdx = 0;
+    let m: RegExpExecArray | null;
+    while ((m = attrRegex.exec(rest)) !== null) {
+        parts.push(<span key={`ws-${m.index}`} style={{ color: SOURCE_COLORS.punctuation }}>{m[1]}</span>);
+        parts.push(<span key={`an-${m.index}`} style={{ color: SOURCE_COLORS.attrName }}>{m[2]}</span>);
+        parts.push(<span key={`eq-${m.index}`} style={{ color: SOURCE_COLORS.punctuation }}>{m[3]}</span>);
+        parts.push(<span key={`av-${m.index}`} style={{ color: SOURCE_COLORS.attrValue }}>{m[4]}</span>);
+        lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < rest.length) {
+        parts.push(<span key="tail" style={{ color: SOURCE_COLORS.punctuation }}>{rest.slice(lastIdx)}</span>);
+    }
+    return <>{parts}</>;
+}
+
 function extractTitle(html: string): string {
     const match = /<title[^>]*>(.*?)<\/title>/is.exec(html);
     return match !== null ? match[1]!.trim() : '';
@@ -355,6 +469,7 @@ function navBtnStyle(disabled: boolean): React.CSSProperties {
         border: '1px solid rgba(255,255,255,0.12)',
         borderRadius: '4px',
         color: disabled ? 'rgba(255,255,255,0.3)' : 'var(--text-secondary, #8b949e)',
+        opacity: disabled ? 0.5 : 1,
         fontFamily: 'inherit',
         fontSize: '0.85rem',
         padding: '4px 8px',

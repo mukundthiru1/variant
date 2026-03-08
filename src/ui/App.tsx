@@ -143,9 +143,13 @@ const LEVELS: readonly MenuLevel[] = [
 ] as const;
 
 const BOOT_STEPS: readonly string[] = [
+    'Loading kernel modules...',
+    'Mounting filesystems...',
+    'Starting network services...',
     'Initializing virtual machines...',
     'Wiring network fabric...',
-    'Loading modules...',
+    'Loading attack surface modules...',
+    'Calibrating detection engine...',
     'Starting simulation...',
 ];
 
@@ -702,7 +706,7 @@ function SimulationScreen({
     const [simState, setSimState] = useState<SimulationState | null>(null);
     const [bootMessage, setBootMessage] = useState<string>('Initializing v86 emulator...');
 
-    // Boot sequence animation: steps 0..3, typewriter for current step
+    // Boot sequence animation: one step at a time, typewriter for current step
     const [bootStepCompleted, setBootStepCompleted] = useState(0);
     const [bootStepIndex, setBootStepIndex] = useState(0);
     const [bootStepText, setBootStepText] = useState('');
@@ -991,7 +995,7 @@ function SimulationScreen({
     // Inject xterm.js CSS on mount
     useEffect(() => { injectXtermCSS(); }, []);
 
-    // Boot sequence typewriter: one step at a time, 40ms per char, 200ms pause between steps
+    // Boot sequence typewriter: one step at a time, 15ms per char, 200ms pause between steps
     useEffect(() => {
         if (terminalIO !== null) return;
         if (bootStepIndex >= BOOT_STEPS.length) return;
@@ -1003,7 +1007,7 @@ function SimulationScreen({
                     const next = full.slice(0, prev.length + 1);
                     return next;
                 });
-            }, 40);
+            }, 15);
             return () => clearTimeout(t);
         }
 
@@ -1383,6 +1387,7 @@ function SimulationScreen({
 
     // ── Pre-boot screen (Matrix-style boot sequence) ─────────────
     if (terminalIO === null) {
+        const bootSequenceReady = bootStepCompleted >= BOOT_STEPS.length;
         const progressPercent = BOOT_STEPS.length > 0
             ? (100 * (bootStepCompleted + (bootStepText.length / ((BOOT_STEPS[bootStepIndex] ?? '').length || 1)))) / BOOT_STEPS.length
             : 0;
@@ -1439,6 +1444,12 @@ function SimulationScreen({
                         }
                         return null;
                     })}
+                    {bootSequenceReady && (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline', marginTop: '0.25rem', animation: 'fadeInUp 0.2s ease-out' }}>
+                            <span style={{ color: '#3DA67A', flexShrink: 0 }}>[READY]</span>
+                            <span style={{ color: '#7fd4a9' }}>System ready</span>
+                        </div>
+                    )}
                 </div>
                 <div style={{
                     marginTop: '2rem',

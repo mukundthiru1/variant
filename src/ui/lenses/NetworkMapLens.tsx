@@ -294,6 +294,26 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
         return Array.from(bySubnet.entries()).map(([subnet, nodeIds]) => ({ name: subnet, nodeIds }));
     }, [nodes]);
 
+    /** Edge keys that have active traffic (for connection glow). */
+    const activeEdgeKeys = useMemo(() => {
+        const set = new Set<string>();
+        for (const flow of traffic) {
+            set.add(`${flow.from}-${flow.to}`);
+            set.add(`${flow.to}-${flow.from}`);
+        }
+        return set;
+    }, [traffic]);
+
+    /** Per-node count of traffic flows (in + out) for badge. */
+    const flowsPerNode = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const flow of traffic) {
+            map.set(flow.from, (map.get(flow.from) ?? 0) + 1);
+            map.set(flow.to, (map.get(flow.to) ?? 0) + 1);
+        }
+        return map;
+    }, [traffic]);
+
     const segmentRects = useMemo(() => {
         return segments.map((seg) => {
             const pts = seg.nodeIds
@@ -329,12 +349,28 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
                     0%, 100% { opacity: 0.25; transform: scale(0.8); }
                     50% { opacity: 0.95; transform: scale(1.25); }
                 }
+                @keyframes network-edge-glow {
+                    0%, 100% { opacity: 0.35; }
+                    50% { opacity: 0.85; }
+                }
+                @keyframes node-breathe {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(1.02); }
+                }
                 .network-edge-flow {
                     stroke-dasharray: 6 7;
                     animation: network-edge-flow 1.1s linear infinite;
                 }
                 .network-edge-pulse {
                     animation: network-edge-pulse 1.5s ease-in-out infinite;
+                    transform-origin: center;
+                }
+                .network-edge-glow {
+                    animation: network-edge-glow 1.8s ease-in-out infinite;
+                    transform-origin: center;
+                }
+                .node-breathe {
+                    animation: node-breathe 3s ease-in-out infinite;
                     transform-origin: center;
                 }
             `}</style>
@@ -382,6 +418,13 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
                                 <feMergeNode in="SourceGraphic" />
                             </feMerge>
                         </filter>
+                        <filter id="edge-glow-active" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+                            <feMerge>
+                                <feMergeNode in="blur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
                         <linearGradient id="edge-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
                             <stop offset="0%" stopColor="#383838" />
                             <stop offset="100%" stopColor="#505050" />
@@ -424,9 +467,22 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
                             const midX = (from.x + to.x) / 2;
                             const midY = (from.y + to.y) / 2;
                             const isConnectedToSelection = selectedNode !== null && (edge.from === selectedNode || edge.to === selectedNode);
+                            const hasActiveTraffic = activeEdgeKeys.has(`${edge.from}-${edge.to}`) || activeEdgeKeys.has(`${edge.to}-${edge.from}`);
                             const edgeStroke = isConnectedToSelection ? BORDER_PLAYER : '#383838';
                             return (
                                 <g key={`edge-${edge.from}-${edge.to}-${i}`}>
+                                    {hasActiveTraffic && (
+                                        <line
+                                            x1={from.x}
+                                            y1={from.y}
+                                            x2={to.x}
+                                            y2={to.y}
+                                            stroke="#4A9EFF"
+                                            strokeWidth={2.5}
+                                            className="network-edge-glow"
+                                            filter="url(#edge-glow-active)"
+                                        />
+                                    )}
                                     <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={edgeStroke} strokeWidth={isConnectedToSelection ? 2.6 : 1.5} opacity={isConnectedToSelection ? 1 : 0.85} />
                                     <line
                                         x1={from.x}
@@ -495,6 +551,7 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
                         const border = getNodeBorder(node);
                         const typeColor = NODE_TYPE_COLORS[node.type];
                         const glow = node.status === 'compromised';
+                        const flowCount = flowsPerNode.get(node.id) ?? 0;
                         const w = NODE_WIDTH;
                         const h = NODE_HEIGHT;
                         return (
@@ -506,55 +563,81 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
                                 onMouseLeave={() => setHoveredNode(null)}
                                 onClick={() => setSelectedNode((prev) => (prev === node.id ? null : node.id))}
                             >
-                                {glow && (
+                                <g className="node-breathe" style={{ transformOrigin: '0 0' }}>
+                                    {glow && (
+                                        <rect
+                                            x={-w / 2 - 6}
+                                            y={-h / 2 - 6}
+                                            width={w + 12}
+                                            height={h + 12}
+                                            rx={NODE_RX + 4}
+                                            fill="rgba(199, 84, 80, 0.12)"
+                                            filter="url(#node-glow-compromised)"
+                                        />
+                                    )}
                                     <rect
-                                        x={-w / 2 - 6}
-                                        y={-h / 2 - 6}
-                                        width={w + 12}
-                                        height={h + 12}
-                                        rx={NODE_RX + 4}
-                                        fill="rgba(199, 84, 80, 0.12)"
-                                        filter="url(#node-glow-compromised)"
+                                        x={-w / 2}
+                                        y={-h / 2}
+                                        width={w}
+                                        height={h}
+                                        rx={NODE_RX}
+                                        fill={isSelected ? '#161b22' : isConnectedToSelection ? '#121212' : '#0d1117'}
+                                        stroke={isSelected ? BORDER_PLAYER : border}
+                                        strokeWidth={isHovered || isSelected || isConnectedToSelection ? 2.5 : 1.5}
                                     />
-                                )}
-                                <rect
-                                    x={-w / 2}
-                                    y={-h / 2}
-                                    width={w}
-                                    height={h}
-                                    rx={NODE_RX}
-                                    fill={isSelected ? '#161b22' : isConnectedToSelection ? '#121212' : '#0d1117'}
-                                    stroke={isSelected ? BORDER_PLAYER : border}
-                                    strokeWidth={isHovered || isSelected || isConnectedToSelection ? 2.5 : 1.5}
-                                />
-                                <circle cx={w / 2 - 8} cy={-h / 2 + 8} r={3.2} fill={typeColor} />
-                                <text
-                                    textAnchor="middle"
-                                    dominantBaseline="central"
-                                    fill={isSelected ? BORDER_PLAYER : border}
-                                    fontSize="14"
-                                    fontFamily="sans-serif"
-                                >
-                                    {TYPE_ICONS[node.type]}
-                                </text>
-                                <text
-                                    y={h / 2 + 12}
-                                    textAnchor="middle"
-                                    fill={isHovered ? TEXT_PRIMARY : TEXT_SECONDARY}
-                                    fontSize="10"
-                                    fontFamily="var(--font-mono, monospace)"
-                                >
-                                    {node.label}
-                                </text>
-                                <text
-                                    y={h / 2 + 24}
-                                    textAnchor="middle"
-                                    fill={TEXT_SECONDARY}
-                                    fontSize="9"
-                                    fontFamily="var(--font-mono, monospace)"
-                                >
-                                    {node.ip}
-                                </text>
+                                    <circle cx={w / 2 - 8} cy={-h / 2 + 8} r={3.2} fill={typeColor} />
+                                    <text
+                                        textAnchor="middle"
+                                        dominantBaseline="central"
+                                        fill={isSelected ? BORDER_PLAYER : border}
+                                        fontSize="14"
+                                        fontFamily="sans-serif"
+                                    >
+                                        {TYPE_ICONS[node.type]}
+                                    </text>
+                                    <text
+                                        y={h / 2 + 12}
+                                        textAnchor="middle"
+                                        fill={isHovered ? TEXT_PRIMARY : TEXT_SECONDARY}
+                                        fontSize="10"
+                                        fontFamily="var(--font-mono, monospace)"
+                                    >
+                                        {node.label}
+                                    </text>
+                                    <text
+                                        y={h / 2 + 24}
+                                        textAnchor="middle"
+                                        fill={TEXT_SECONDARY}
+                                        fontSize="9"
+                                        fontFamily="var(--font-mono, monospace)"
+                                    >
+                                        {node.ip}
+                                    </text>
+                                    {flowCount > 0 && (
+                                        <g aria-label={`${flowCount} flows/sec`}>
+                                            <rect
+                                                x={w / 2 - 14}
+                                                y={-h / 2 - 2}
+                                                width={20}
+                                                height={12}
+                                                rx={4}
+                                                fill="#0d1117"
+                                                stroke="#4A9EFF"
+                                                strokeWidth={1}
+                                            />
+                                            <text
+                                                x={w / 2 - 4}
+                                                y={-h / 2 + 6}
+                                                textAnchor="middle"
+                                                fill="#4A9EFF"
+                                                fontSize="8"
+                                                fontFamily="var(--font-mono, monospace)"
+                                            >
+                                                {flowCount}/s
+                                            </text>
+                                        </g>
+                                    )}
+                                </g>
                             </g>
                         );
                     })}

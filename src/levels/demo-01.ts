@@ -198,15 +198,16 @@ export const DEMO_01: WorldSpec = {
             },
 
             services: [
-                { name: 'nginx', command: 'nginx -g "daemon off;"', ports: [80], autostart: true },
+                { name: 'nginx', command: 'nginx -g "daemon off;"', ports: [80, 443], autostart: true },
                 { name: 'sshd', command: '/usr/sbin/sshd -D', ports: [22], autostart: true },
             ],
 
             processes: [
-                { name: 'nginx: master', pid: 1, user: 'root', cpu: 0.1, mem: 2.3 },
+                { name: 'init', pid: 1, user: 'root', cpu: 0.0, mem: 1.1 },
+                { name: 'sshd', pid: 18, user: 'root', cpu: 0.0, mem: 1.2 },
+                { name: 'crond', pid: 29, user: 'root', cpu: 0.0, mem: 0.4 },
+                { name: 'nginx: master', pid: 42, user: 'root', cpu: 0.1, mem: 2.3 },
                 { name: 'nginx: worker', pid: 45, user: 'www-data', cpu: 0.3, mem: 1.8 },
-                { name: 'sshd', pid: 23, user: 'root', cpu: 0.0, mem: 1.2 },
-                { name: 'cron', pid: 67, user: 'root', cpu: 0.0, mem: 0.5 },
             ],
 
             crontab: [

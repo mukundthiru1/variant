@@ -198,14 +198,16 @@ export const DEMO_02: WorldSpec = {
             },
 
             services: [
-                { name: 'nginx', command: 'nginx -g "daemon off;"', ports: [80], autostart: true },
+                { name: 'nginx', command: 'nginx -g "daemon off;"', ports: [80, 443], autostart: true },
                 { name: 'sshd', command: '/usr/sbin/sshd -D', ports: [22], autostart: true },
             ],
 
             processes: [
-                { name: 'nginx: master', pid: 1, user: 'root', cpu: 0.1, mem: 2.3 },
+                { name: 'init', pid: 1, user: 'root', cpu: 0.0, mem: 1.0 },
+                { name: 'sshd', pid: 19, user: 'root', cpu: 0.0, mem: 1.2 },
+                { name: 'crond', pid: 26, user: 'root', cpu: 0.0, mem: 0.4 },
+                { name: 'nginx: master', pid: 41, user: 'root', cpu: 0.1, mem: 2.3 },
                 { name: 'nginx: worker', pid: 45, user: 'www-data', cpu: 0.3, mem: 1.8 },
-                { name: 'sshd', pid: 23, user: 'root', cpu: 0.0, mem: 1.2 },
             ],
         },
 
@@ -255,8 +257,10 @@ export const DEMO_02: WorldSpec = {
             ],
 
             processes: [
-                { name: 'mysqld', pid: 10, user: 'mysql', cpu: 0.5, mem: 45 },
-                { name: 'sshd', pid: 25, user: 'root', cpu: 0.0, mem: 1.2 },
+                { name: 'init', pid: 1, user: 'root', cpu: 0.0, mem: 1.1 },
+                { name: 'sshd', pid: 18, user: 'root', cpu: 0.0, mem: 1.2 },
+                { name: 'crond', pid: 24, user: 'root', cpu: 0.0, mem: 0.5 },
+                { name: 'mysqld', pid: 37, user: 'mysql', cpu: 0.5, mem: 45 },
             ],
         },
 
@@ -300,7 +304,9 @@ export const DEMO_02: WorldSpec = {
             ],
 
             processes: [
-                { name: 'sshd', pid: 1, user: 'root', cpu: 0.0, mem: 1.2 },
+                { name: 'init', pid: 1, user: 'root', cpu: 0.0, mem: 0.9 },
+                { name: 'sshd', pid: 21, user: 'root', cpu: 0.0, mem: 1.2 },
+                { name: 'crond', pid: 33, user: 'root', cpu: 0.0, mem: 0.5 },
             ],
         },
     },
