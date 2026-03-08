@@ -5,6 +5,9 @@ import { DEMO_01 } from '../../src/levels/demo-01';
 import { createModuleRegistry } from '../../src/core/modules';
 import { createObjectiveDetector } from '../../src/modules/objective-detector';
 import { createScoringEngine } from '../../src/modules/scoring-engine';
+import { createNetworkMonitor } from '../../src/modules/network-monitor';
+import { createFilesystemMonitor } from '../../src/modules/fs-monitor';
+import { createProcessMonitor } from '../../src/modules/process-monitor';
 
 // Minimal fake VMBackend that satisfies the VMBackend contract used by the
 // engine. It's intentionally simple — boots immediately and exposes the
@@ -71,6 +74,9 @@ describe('Engine — end-to-end integration', () => {
         registry = createModuleRegistry();
         registry.register('objective-detector', createObjectiveDetector);
         registry.register('scoring-engine', createScoringEngine);
+        registry.register('network-monitor', createNetworkMonitor);
+        registry.register('fs-monitor', createFilesystemMonitor);
+        registry.register('process-monitor', createProcessMonitor);
         sim = null;
     });
 

@@ -21,6 +21,13 @@ import { createBackendRouter } from '../backends/backend-router';
 import { createObjectiveDetector } from '../modules/objective-detector';
 import { createScoringEngine } from '../modules/scoring-engine';
 import { createGameOverDetector } from '../modules/gameover-detector';
+import { createNPCEngine } from '../modules/npc-engine';
+import { createTrafficGenerator } from '../modules/traffic-generator';
+import { createNetworkMonitor } from '../modules/network-monitor';
+import { createProcessMonitor } from '../modules/process-monitor';
+import { createFilesystemMonitor } from '../modules/fs-monitor';
+import { createCorrelationModule } from '../modules/correlation-module';
+import { createVariantInternet } from '../modules/variant-internet';
 import { injectXtermCSS } from '../modules/terminal';
 import { DEMO_01 } from '../levels/demo-01';
 import { DEMO_02 } from '../levels/demo-02';
@@ -988,6 +995,13 @@ function SimulationScreen({
                 registry.register('objective-detector', createObjectiveDetector);
                 registry.register('scoring-engine', createScoringEngine);
                 registry.register('gameover-detector', createGameOverDetector);
+                registry.register('npc-engine', createNPCEngine);
+                registry.register('traffic-generator', createTrafficGenerator);
+                registry.register('network-monitor', createNetworkMonitor);
+                registry.register('process-monitor', createProcessMonitor);
+                registry.register('fs-monitor', createFilesystemMonitor);
+                registry.register('correlation-module', createCorrelationModule);
+                registry.register('variant-internet', createVariantInternet);
 
                 setBootMessage('Validating WorldSpec...');
                 const sim = createSimulation({
