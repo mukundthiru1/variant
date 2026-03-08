@@ -6,7 +6,7 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -89,9 +89,35 @@ function getDifficultyColor(difficulty: string): string {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+function useFadeIn(): { ref: React.RefObject<HTMLElement | null>; style: CSSProperties } {
+    const ref = useRef<HTMLElement | null>(null);
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (el === null) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => { if (entry !== undefined && entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+            { threshold: 0.12 },
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
+    return {
+        ref,
+        style: {
+            opacity: visible ? 1 : 0,
+            transform: visible ? 'translateY(0)' : 'translateY(18px)',
+            transition: 'opacity 0.6s ease, transform 0.6s ease',
+        },
+    };
+}
+
 function Section({ id, children, style = {} }: { id: string; children: ReactNode; style?: CSSProperties }): JSX.Element {
+    const fade = useFadeIn();
     return (
-        <section id={id} style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '5rem 1.5rem', boxSizing: 'border-box', ...style }}>
+        <section ref={fade.ref as React.RefObject<HTMLElement>} id={id} style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '5rem 1.5rem', boxSizing: 'border-box', ...fade.style, ...style }}>
             {children}
         </section>
     );
@@ -210,6 +236,10 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                 }}>
                     VARIANT
                 </h1>
+                <div style={{
+                    width: '48px', height: '2px', background: C.signal,
+                    margin: '1.25rem auto 0', opacity: 0.6,
+                }} />
                 <p style={{
                     fontFamily: FONT_BODY, fontSize: 'clamp(0.9rem, 2vw, 1rem)', color: C.muted,
                     marginTop: '1.25rem', maxWidth: '460px', lineHeight: 1.6, letterSpacing: '0.01em',
