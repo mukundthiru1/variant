@@ -292,6 +292,31 @@ export function createSimulacrumBackend(configs?: ReadonlyMap<string, Simulacrum
                     : new TextDecoder().decode(overlayEntry.content);
                 vfs.writeFile(path, content);
             }
+
+            // Sync shell state from overlaid system files
+            if (overlay.files.has('/etc/hostname')) {
+                const hostnameContent = vfs.readFile('/etc/hostname');
+                if (hostnameContent !== null) {
+                    instance.shell.setHostname(hostnameContent.trim());
+                }
+            }
+
+            // Detect user from /etc/passwd — find the first non-system user (uid >= 1000)
+            if (overlay.files.has('/etc/passwd')) {
+                const passwdContent = vfs.readFile('/etc/passwd');
+                if (passwdContent !== null) {
+                    const lines = passwdContent.split('\n');
+                    for (const line of lines) {
+                        const parts = line.split(':');
+                        const uid = parseInt(parts[2] ?? '0', 10);
+                        const username = parts[0];
+                        if (uid >= 1000 && username !== undefined && username !== 'nobody') {
+                            instance.shell.setUser(username);
+                            break;
+                        }
+                    }
+                }
+            }
         },
 
         async snapshot(vm: VMInstance): Promise<VMSnapshot> {

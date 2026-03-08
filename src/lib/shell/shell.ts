@@ -29,8 +29,8 @@ import type {
 export function createShell(config: ShellConfig): ScriptedShell {
     const vfs = config.vfs;
     let cwd = config.cwd ?? (config.user === 'root' || config.user === undefined ? '/root' : `/home/${config.user}`);
-    const user = config.user ?? 'root';
-    const hostname = config.hostname ?? 'localhost';
+    let user = config.user ?? 'root';
+    let hostname = config.hostname ?? 'localhost';
     const env = new Map<string, string>(config.env ?? []);
     const commands = new Map<string, CommandHandler>();
     const services = config.services ?? [];
@@ -1928,6 +1928,12 @@ export function createShell(config: ShellConfig): ScriptedShell {
         getCwd() { return cwd; },
         getUser() { return user; },
         getHostname() { return hostname; },
+        setHostname(name: string) { hostname = name; },
+        setUser(name: string) {
+            user = name;
+            cwd = name === 'root' ? '/root' : `/home/${name}`;
+            if (!vfs.exists(cwd)) vfs.mkdir(cwd, { recursive: true });
+        },
 
         getPrompt(): string {
             const cwdDisplay = cwd === env.get('HOME') ? '~' : cwd;

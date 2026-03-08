@@ -41,6 +41,12 @@ export interface ScriptedShell {
     /** Get the hostname. */
     getHostname(): string;
 
+    /** Update the hostname (e.g., after overlay applies /etc/hostname). */
+    setHostname(name: string): void;
+
+    /** Update the current user (e.g., after overlay applies user config). */
+    setUser(name: string): void;
+
     /** Get the shell prompt string. */
     getPrompt(): string;
 

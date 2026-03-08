@@ -704,22 +704,22 @@ function SimulationScreen({
 
         const unsubs: Array<() => void> = [];
 
-        unsubs.push(sim.events.onPrefix('custom:email-received', (event) => {
+        unsubs.push(sim.events.on('custom:email-received', (event) => {
             const msg = (event as { data: unknown }).data as EmailMessage;
             emailsRef.current = [...emailsRef.current, msg];
         }));
 
-        unsubs.push(sim.events.onPrefix('custom:email-sent', (event) => {
+        unsubs.push(sim.events.on('custom:email-sent', (event) => {
             const msg = (event as { data: unknown }).data as EmailMessage;
             emailsRef.current = [...emailsRef.current, msg];
         }));
 
-        unsubs.push(sim.events.onPrefix('custom:log-entry', (event) => {
+        unsubs.push(sim.events.on('custom:log-entry', (event) => {
             const entry = (event as { data: unknown }).data as LogEntry;
             logsRef.current = [...logsRef.current.slice(-9999), entry];
         }));
 
-        unsubs.push(sim.events.onPrefix('custom:network-topology', (event) => {
+        unsubs.push(sim.events.on('custom:network-topology', (event) => {
             const topo = (event as { data: unknown }).data as {
                 nodes: readonly NetworkNode[];
                 edges: readonly NetworkEdge[];
@@ -728,19 +728,19 @@ function SimulationScreen({
             networkEdgesRef.current = topo.edges;
         }));
 
-        unsubs.push(sim.events.onPrefix('custom:traffic-flow', (event) => {
+        unsubs.push(sim.events.on('custom:traffic-flow', (event) => {
             const flow = (event as { data: unknown }).data as TrafficFlow;
             // Keep last 200 flows for animation
             trafficFlowsRef.current = [...trafficFlowsRef.current.slice(-199), flow];
         }));
 
-        unsubs.push(sim.events.onPrefix('custom:process-list', (event) => {
+        unsubs.push(sim.events.on('custom:process-list', (event) => {
             const procs = (event as { data: unknown }).data as readonly ProcessInfo[];
             processesRef.current = procs;
         }));
 
         // Tap fabric for packet capture
-        unsubs.push(sim.events.onPrefix('custom:packet-captured', (event) => {
+        unsubs.push(sim.events.on('custom:packet-captured', (event) => {
             const pkt = (event as { data: unknown }).data as CapturedPacket;
             packetsRef.current = [...packetsRef.current.slice(-9999), pkt];
         }));
@@ -788,7 +788,7 @@ function SimulationScreen({
 
         // Query VFS through event bus — modules respond with file listings
         const entries: FileEntry[] = [];
-        const unsub = sim.events.onPrefix('custom:vfs-listing', (event) => {
+        const unsub = sim.events.on('custom:vfs-listing', (event) => {
             const listing = (event as { data: unknown }).data as { path: string; entries: readonly FileEntry[] };
             if (listing.path === path) {
                 entries.push(...listing.entries);
@@ -804,7 +804,7 @@ function SimulationScreen({
         if (sim === null) return null;
 
         let content: string | null = null;
-        const unsub = sim.events.onPrefix('custom:vfs-content', (event) => {
+        const unsub = sim.events.on('custom:vfs-content', (event) => {
             const result = (event as { data: unknown }).data as { path: string; content: string };
             if (result.path === path) {
                 content = result.content;
