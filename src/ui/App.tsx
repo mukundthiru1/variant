@@ -142,6 +142,13 @@ const LEVELS: readonly MenuLevel[] = [
     },
 ] as const;
 
+const BOOT_STEPS: readonly string[] = [
+    'Initializing virtual machines...',
+    'Wiring network fabric...',
+    'Loading modules...',
+    'Starting simulation...',
+];
+
 // ── App Component ──────────────────────────────────────────────
 
 export function App(): JSX.Element {
@@ -694,6 +701,11 @@ function SimulationScreen({
     const [simState, setSimState] = useState<SimulationState | null>(null);
     const [bootMessage, setBootMessage] = useState<string>('Initializing v86 emulator...');
 
+    // Boot sequence animation: steps 0..3, typewriter for current step
+    const [bootStepCompleted, setBootStepCompleted] = useState(0);
+    const [bootStepIndex, setBootStepIndex] = useState(0);
+    const [bootStepText, setBootStepText] = useState('');
+
     // ── Compositor state ────────────────────────────────────────
     const [compositorState, dispatchCompositor] = useReducer(compositorReducer, undefined, createInitialState);
 
@@ -976,6 +988,31 @@ function SimulationScreen({
 
     // Inject xterm.js CSS on mount
     useEffect(() => { injectXtermCSS(); }, []);
+
+    // Boot sequence typewriter: one step at a time, 40ms per char, 200ms pause between steps
+    useEffect(() => {
+        if (terminalIO !== null) return;
+        if (bootStepIndex >= BOOT_STEPS.length) return;
+
+        const full = BOOT_STEPS[bootStepIndex] ?? '';
+        if (bootStepText.length < full.length) {
+            const t = setTimeout(() => {
+                setBootStepText(prev => {
+                    const next = full.slice(0, prev.length + 1);
+                    return next;
+                });
+            }, 40);
+            return () => clearTimeout(t);
+        }
+
+        // Step complete: mark done, pause 200ms, then advance to next step
+        const t = setTimeout(() => {
+            setBootStepCompleted(c => c + 1);
+            setBootStepIndex(i => i + 1);
+            setBootStepText('');
+        }, 200);
+        return () => clearTimeout(t);
+    }, [terminalIO, bootStepIndex, bootStepText]);
 
     // Boot simulation
     useEffect(() => {
@@ -1340,8 +1377,12 @@ function SimulationScreen({
         }
     }, [terminalIO, handleOpenLens, handleBrowserNavigate, handleEmailSend, handleEmailMarkRead, handleLogRefresh, handleListDir, handleReadFile, handleProcessRefresh, handleToggleCapture, handleClearPackets, capturing, lazyLensFallback]);
 
-    // ── Pre-boot screen ─────────────────────────────────────────
+    // ── Pre-boot screen (Matrix-style boot sequence) ─────────────
     if (terminalIO === null) {
+        const progressPercent = BOOT_STEPS.length > 0
+            ? (100 * (bootStepCompleted + (bootStepText.length / ((BOOT_STEPS[bootStepIndex] ?? '').length || 1)))) / BOOT_STEPS.length
+            : 0;
+
         return (
             <div style={{
                 display: 'flex',
@@ -1349,32 +1390,77 @@ function SimulationScreen({
                 alignItems: 'center',
                 justifyContent: 'center',
                 height: '100vh',
-                background: '#0a0e14',
+                background: '#0a0a0a',
                 fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                padding: '2rem',
+                boxSizing: 'border-box',
             }}>
                 <div style={{
-                    fontSize: '1.5rem',
+                    fontSize: '1.25rem',
                     fontWeight: 700,
                     color: '#D4A03A',
                     textShadow: '0 0 20px rgba(212, 160, 58, 0.3)',
-                    letterSpacing: '0.1em',
-                    marginBottom: '2rem',
+                    letterSpacing: '0.15em',
+                    marginBottom: '2.5rem',
                 }}>
                     VARIANT
                 </div>
                 <div style={{
-                    width: '40px',
-                    height: '40px',
-                    border: '3px solid #21262d',
-                    borderTopColor: '#D4A03A',
-                    borderRadius: '50%',
-                    animation: 'spin 0.8s linear infinite',
-                    marginBottom: '1rem',
-                }} />
-                <div style={{ color: '#8b949e', fontSize: '0.8rem' }}>
-                    {bootMessage}
+                    width: 'min(420px, 100%)',
+                    fontSize: '0.8rem',
+                    lineHeight: 1.8,
+                    color: '#8b949e',
+                }}>
+                    {BOOT_STEPS.map((step, i) => {
+                        const done = i < bootStepCompleted;
+                        const current = i === bootStepIndex;
+                        if (done) {
+                            return (
+                                <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+                                    <span style={{ color: '#3DA67A', flexShrink: 0 }}>[OK]</span>
+                                    <span style={{ color: '#8b949e' }}>{step}</span>
+                                </div>
+                            );
+                        }
+                        if (current) {
+                            return (
+                                <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+                                    <span style={{ color: '#D4A03A', flexShrink: 0 }}>[BOOT]</span>
+                                    <span style={{ color: '#e0e0e0' }}>
+                                        {bootStepText}
+                                        <span style={{ animation: 'bootCursor 0.6s step-end infinite', color: '#D4A03A' }}>_</span>
+                                    </span>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })}
                 </div>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                <div style={{
+                    marginTop: '2rem',
+                    width: 'min(320px, 100%)',
+                    height: '4px',
+                    background: '#1a1a1a',
+                    borderRadius: '2px',
+                    overflow: 'hidden',
+                }}>
+                    <div style={{
+                        width: `${progressPercent}%`,
+                        height: '100%',
+                        background: '#D4A03A',
+                        borderRadius: '2px',
+                        transition: 'width 0.15s ease-out',
+                    }} />
+                </div>
+                {bootMessage.startsWith('Boot failed') && (
+                    <div style={{ marginTop: '1.5rem', color: '#ff5555', fontSize: '0.75rem', maxWidth: '360px', textAlign: 'center' }}>
+                        {bootMessage}
+                    </div>
+                )}
+                <style>{`
+                    @keyframes spin { to { transform: rotate(360deg); } }
+                    @keyframes bootCursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+                `}</style>
             </div>
         );
     }
