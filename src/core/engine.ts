@@ -559,12 +559,6 @@ export function createSimulation(options: CreateSimulationOptions): Simulation {
                         backend.sendFrame(vm, frame);
                     });
 
-                    // Attach terminal for player machines
-                    if (spec.role === 'player') {
-                        const termIO = backend.attachTerminal(vm);
-                        terminals.set(machineId, termIO);
-                    }
-
                     // Build system files + author overlays
                     const files = new Map<string, { content: string | Uint8Array }>();
 
@@ -583,6 +577,12 @@ export function createSimulation(options: CreateSimulationOptions): Simulation {
 
                     if (files.size > 0) {
                         await backend.applyOverlay(vm, { files });
+                    }
+
+                    // Attach terminal AFTER overlay so hostname/user are correct
+                    if (spec.role === 'player') {
+                        const termIO = backend.attachTerminal(vm);
+                        terminals.set(machineId, termIO);
                     }
                 }
 

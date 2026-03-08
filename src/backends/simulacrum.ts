@@ -224,7 +224,7 @@ export function createSimulacrumBackend(configs?: ReadonlyMap<string, Simulacrum
         attachTerminal(vm: VMInstance): TerminalIO {
             const instance = getInstance(vm);
 
-            // Send initial prompt
+            // Send initial prompt (overlay has already been applied by the engine)
             setTimeout(() => {
                 emitOutput(instance, `\r\n${instance.shell.getHostname()} login: ${instance.shell.getUser()}\r\n`);
                 emitOutput(instance, instance.shell.getPrompt());
