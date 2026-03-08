@@ -32,6 +32,8 @@ const SHORTCUTS = [
     { keys: 'Ctrl+W', action: 'Close focused lens' },
     { keys: 'F11', action: 'Toggle maximize lens' },
     { keys: 'Escape', action: 'Restore maximized lens' },
+    { keys: 'Ctrl+H', action: 'Toggle hint panel' },
+    { keys: 'Ctrl+?', action: 'Toggle help overlay' },
 ] as const;
 
 export interface SettingsPageProps {
