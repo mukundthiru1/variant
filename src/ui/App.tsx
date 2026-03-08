@@ -11,7 +11,7 @@
  * (level designer controls the player's toolset).
  */
 
-import { useState, useCallback, useEffect, useRef, useReducer, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useReducer, useMemo, lazy, Suspense } from 'react';
 import type { TerminalIO } from '../core/vm/types';
 import type { Simulation, SimulationState } from '../core/engine';
 import { createSimulation } from '../core/engine';
@@ -46,22 +46,23 @@ import { LensCompositor } from './lenses/LensCompositor';
 import { TerminalLens } from './lenses/TerminalLens';
 import { BrowserLens } from './lenses/BrowserLens';
 import type { BrowserResponse } from './lenses/BrowserLens';
-import { EmailLens } from './lenses/EmailLens';
 import type { EmailMessage } from './lenses/EmailLens';
-import { LogViewerLens } from './lenses/LogViewerLens';
 import type { LogEntry } from './lenses/LogViewerLens';
-import { FileManagerLens } from './lenses/FileManagerLens';
 import type { FileEntry } from './lenses/FileManagerLens';
-import { NetworkMapLens } from './lenses/NetworkMapLens';
 import type { NetworkNode, NetworkEdge, TrafficFlow } from './lenses/NetworkMapLens';
-import { ProcessViewerLens } from './lenses/ProcessViewerLens';
 import type { ProcessInfo } from './lenses/ProcessViewerLens';
-import { PacketCaptureLens } from './lenses/PacketCaptureLens';
 import type { CapturedPacket } from './lenses/PacketCaptureLens';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotifications } from './hooks/useNotifications';
 import { NotificationToast } from './components/NotificationToast';
 import { HelpOverlay } from './components/HelpOverlay';
+
+const NetworkMapLensLazy = lazy(async () => ({ default: (await import('./lenses/NetworkMapLens')).NetworkMapLens }));
+const PacketCaptureLensLazy = lazy(async () => ({ default: (await import('./lenses/PacketCaptureLens')).PacketCaptureLens }));
+const ProcessViewerLensLazy = lazy(async () => ({ default: (await import('./lenses/ProcessViewerLens')).ProcessViewerLens }));
+const EmailLensLazy = lazy(async () => ({ default: (await import('./lenses/EmailLens')).EmailLens }));
+const FileManagerLensLazy = lazy(async () => ({ default: (await import('./lenses/FileManagerLens')).FileManagerLens }));
+const LogViewerLensLazy = lazy(async () => ({ default: (await import('./lenses/LogViewerLens')).LogViewerLens }));
 
 // ── App State Machine ──────────────────────────────────────────
 
@@ -1077,6 +1078,10 @@ function SimulationScreen({
             unsubs.push(sim.events.on('objective:progress', () => {
                 setSimState(sim.getState());
             }));
+            unsubs.push(sim.events.on('sim:gameover', (event) => {
+                setSimState(sim.getState());
+                addNotification('error', 'Game Over', event.reason, { timeout: 0 });
+            }));
             unsubs.push(sim.events.onPrefix('custom:', (event) => {
                 if (event.type === 'custom:score-update') {
                     setSimState(sim.getState());
@@ -1201,6 +1206,12 @@ function SimulationScreen({
         }
     }, [addNotification]);
 
+    const lazyLensFallback = (
+        <div style={{ padding: '8px', fontSize: '0.8rem', color: '#999', fontFamily: 'var(--font-mono)' }}>
+            Loading...
+        </div>
+    );
+
     // ── Render lens by type ─────────────────────────────────────
     const renderLens = useCallback((lens: LensInstance, focused: boolean): JSX.Element => {
         switch (lens.type) {
@@ -1242,62 +1253,74 @@ function SimulationScreen({
 
             case 'email':
                 return (
-                    <EmailLens
-                        account={typeof lens.config['account'] === 'string' ? lens.config['account'] : 'operator@variant.local'}
-                        emails={emailsRef.current}
-                        onSend={handleEmailSend}
-                        onMarkRead={handleEmailMarkRead}
-                        focused={focused}
-                    />
+                    <Suspense fallback={lazyLensFallback}>
+                        <EmailLensLazy
+                            account={typeof lens.config['account'] === 'string' ? lens.config['account'] : 'operator@variant.local'}
+                            emails={emailsRef.current}
+                            onSend={handleEmailSend}
+                            onMarkRead={handleEmailMarkRead}
+                            focused={focused}
+                        />
+                    </Suspense>
                 );
 
             case 'log-viewer':
                 return (
-                    <LogViewerLens
-                        logs={logsRef.current}
-                        onRefresh={handleLogRefresh}
-                        focused={focused}
-                    />
+                    <Suspense fallback={lazyLensFallback}>
+                        <LogViewerLensLazy
+                            logs={logsRef.current}
+                            onRefresh={handleLogRefresh}
+                            focused={focused}
+                        />
+                    </Suspense>
                 );
 
             case 'file-manager':
                 return (
-                    <FileManagerLens
-                        onListDir={handleListDir}
-                        onReadFile={handleReadFile}
-                        focused={focused}
-                    />
+                    <Suspense fallback={lazyLensFallback}>
+                        <FileManagerLensLazy
+                            onListDir={handleListDir}
+                            onReadFile={handleReadFile}
+                            focused={focused}
+                        />
+                    </Suspense>
                 );
 
             case 'network-map':
                 return (
-                    <NetworkMapLens
-                        nodes={networkNodesRef.current}
-                        edges={networkEdgesRef.current}
-                        traffic={trafficFlowsRef.current}
-                        focused={focused}
-                    />
+                    <Suspense fallback={lazyLensFallback}>
+                        <NetworkMapLensLazy
+                            nodes={networkNodesRef.current}
+                            edges={networkEdgesRef.current}
+                            traffic={trafficFlowsRef.current}
+                            focused={focused}
+                        />
+                    </Suspense>
                 );
 
             case 'process-viewer':
                 return (
-                    <ProcessViewerLens
-                        processes={processesRef.current}
-                        machineName={lens.targetMachine ?? 'unknown'}
-                        onRefresh={handleProcessRefresh}
-                        focused={focused}
-                    />
+                    <Suspense fallback={lazyLensFallback}>
+                        <ProcessViewerLensLazy
+                            processes={processesRef.current}
+                            machineName={lens.targetMachine ?? 'unknown'}
+                            onRefresh={handleProcessRefresh}
+                            focused={focused}
+                        />
+                    </Suspense>
                 );
 
             case 'packet-capture':
                 return (
-                    <PacketCaptureLens
-                        packets={packetsRef.current}
-                        capturing={capturing}
-                        onToggleCapture={handleToggleCapture}
-                        onClear={handleClearPackets}
-                        focused={focused}
-                    />
+                    <Suspense fallback={lazyLensFallback}>
+                        <PacketCaptureLensLazy
+                            packets={packetsRef.current}
+                            capturing={capturing}
+                            onToggleCapture={handleToggleCapture}
+                            onClear={handleClearPackets}
+                            focused={focused}
+                        />
+                    </Suspense>
                 );
 
             default:
@@ -1315,7 +1338,7 @@ function SimulationScreen({
                     </div>
                 );
         }
-    }, [terminalIO, handleOpenLens, handleBrowserNavigate, handleEmailSend, handleEmailMarkRead, handleLogRefresh, handleListDir, handleReadFile, handleProcessRefresh, handleToggleCapture, handleClearPackets, capturing]);
+    }, [terminalIO, handleOpenLens, handleBrowserNavigate, handleEmailSend, handleEmailMarkRead, handleLogRefresh, handleListDir, handleReadFile, handleProcessRefresh, handleToggleCapture, handleClearPackets, capturing, lazyLensFallback]);
 
     // ── Pre-boot screen ─────────────────────────────────────────
     if (terminalIO === null) {

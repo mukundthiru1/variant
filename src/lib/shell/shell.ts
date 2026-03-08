@@ -215,6 +215,13 @@ export function createShell(config: ShellConfig): ScriptedShell {
         commands.set('crontab', builtinCrontab);
         commands.set('service', builtinService);
         commands.set('systemctl', builtinSystemctl);
+        commands.set('less', builtinLess);
+        commands.set('more', builtinLess);
+        commands.set('man', builtinMan);
+        commands.set('help', builtinHelp);
+        commands.set('alias', () => ({ output: '', exitCode: 0 }));
+        commands.set('type', builtinType);
+        commands.set('printenv', builtinEnv);
     }
 
     // ── Built-in implementations ──────────────────────────────
@@ -1757,6 +1764,40 @@ export function createShell(config: ShellConfig): ScriptedShell {
             return builtinService([svcName, 'status'], ctx);
         }
         return { output: '', exitCode: 0 };
+    };
+
+    // less/more — pager (in a terminal emulator, just cat the output)
+    const builtinLess: CommandHandler = (args, ctx, stdin) => {
+        if (args.length === 0 && stdin !== undefined) {
+            return { output: stdin, exitCode: 0 };
+        }
+        return builtinCat(args, ctx, stdin);
+    };
+
+    // man — manual pages (display concise built-in help)
+    const builtinMan: CommandHandler = (args) => {
+        const cmd = args[0];
+        if (cmd === undefined) return { output: 'What manual page do you want?\n', exitCode: 1 };
+        if (commands.has(cmd)) {
+            return { output: `${cmd} - built-in command\nUsage: ${cmd} [options] [arguments]\nPart of the VARIANT simulated shell.\n`, exitCode: 0 };
+        }
+        return { output: `No manual entry for ${cmd}\n`, exitCode: 1 };
+    };
+
+    // help — list all available commands
+    const builtinHelp: CommandHandler = () => {
+        const cmds = Array.from(commands.keys()).sort();
+        return { output: `Available commands (${cmds.length}):\n${cmds.join('  ')}\n`, exitCode: 0 };
+    };
+
+    // type — show command type (like bash `type`)
+    const builtinType: CommandHandler = (args) => {
+        const cmd = args[0];
+        if (cmd === undefined) return { output: 'type: usage: type name\n', exitCode: 1 };
+        if (commands.has(cmd)) {
+            return { output: `${cmd} is a shell builtin\n`, exitCode: 0 };
+        }
+        return { output: `-sh: type: ${cmd}: not found\n`, exitCode: 1 };
     };
 
     // ── Register built-ins ────────────────────────────────────

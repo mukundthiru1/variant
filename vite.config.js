@@ -18,8 +18,19 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 // v86.wasm is large — keep it as a separate chunk
-                manualChunks: {
-                    'xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-webgl'],
+                manualChunks: (id) => {
+                    const normalizedId = id.replaceAll('\\', '/');
+                    if (normalizedId.includes('/src/modules/'))
+                        return 'modules';
+                    if (normalizedId.includes('/src/levels/'))
+                        return 'levels';
+                    if (normalizedId.includes('/node_modules/@xterm/xterm/') || normalizedId.includes('/node_modules/@xterm/addon-fit/')) {
+                        return 'xterm';
+                    }
+                    if (normalizedId.includes('/node_modules/react/') || normalizedId.includes('/node_modules/react-dom/')) {
+                        return 'vendor';
+                    }
+                    return undefined;
                 },
             },
         },
