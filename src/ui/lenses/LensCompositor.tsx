@@ -333,6 +333,16 @@ function TabGroup({ node, state, dispatch, renderLens, path }: TabGroupProps): J
                                 });
                                 dispatch({ type: 'focus-lens', lensId: child.lensId });
                             }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = active
+                                    ? 'var(--bg-elevated, #1c2128)'
+                                    : 'rgba(212, 160, 58, 0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = active
+                                    ? 'var(--bg-primary, #0a0e14)'
+                                    : 'transparent';
+                            }}
                             style={{
                                 background: active ? 'var(--bg-primary, #0a0e14)' : 'transparent',
                                 border: 'none',
@@ -340,11 +350,32 @@ function TabGroup({ node, state, dispatch, renderLens, path }: TabGroupProps): J
                                 color: active ? '#e6edf3' : '#666',
                                 fontFamily: 'inherit',
                                 fontSize: '0.7rem',
-                                padding: '4px 12px',
+                                padding: '4px 8px 4px 12px',
                                 cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
                             }}
                         >
-                            {lens.title}
+                            <span>{lens.title}</span>
+                            <span
+                                role="button"
+                                aria-label={`Close ${lens.title}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    dispatch({ type: 'close-lens', lensId: child.lensId });
+                                }}
+                                onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                }}
+                                style={{
+                                    color: '#666',
+                                    fontSize: '0.75rem',
+                                    lineHeight: 1,
+                                }}
+                            >
+                                {'\u00D7'}
+                            </span>
                         </button>
                     );
                 })}
@@ -413,6 +444,14 @@ function LensHeader({ lens, focused, dispatch, maximized }: LensHeaderProps): JS
                         e.stopPropagation();
                         dispatch({ type: 'toggle-maximize', lensId: lens.id });
                     }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#D4A03A';
+                        e.currentTarget.style.background = 'rgba(212, 160, 58, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#666';
+                        e.currentTarget.style.background = 'transparent';
+                    }}
                     style={headerBtnStyle}
                     title={maximized ? 'Restore' : 'Maximize'}
                 >
@@ -423,7 +462,15 @@ function LensHeader({ lens, focused, dispatch, maximized }: LensHeaderProps): JS
                         e.stopPropagation();
                         dispatch({ type: 'close-lens', lensId: lens.id });
                     }}
-                    style={{ ...headerBtnStyle, color: '#ff5555' }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#ff5555';
+                        e.currentTarget.style.background = 'rgba(255, 85, 85, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#666';
+                        e.currentTarget.style.background = 'transparent';
+                    }}
+                    style={headerBtnStyle}
                     title="Close"
                 >
                     {'\u2715'}
