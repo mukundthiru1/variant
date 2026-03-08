@@ -229,6 +229,60 @@ export function createSimulacrumBackend(configs?: ReadonlyMap<string, Simulacrum
 
         attachTerminal(vm: VMInstance): TerminalIO {
             const instance = getInstance(vm);
+            const commandHistory: string[] = [];
+            let historyIndex = 0;
+            const maxHistoryEntries = 100;
+            const knownCommandCandidates = [
+                'ls', 'cat', 'cd', 'pwd', 'echo', 'whoami', 'hostname', 'id', 'uname', 'env', 'export',
+                'mkdir', 'rm', 'touch', 'head', 'tail', 'wc', 'grep', 'find', 'chmod', 'chown', 'cp',
+                'mv', 'file', 'which', 'true', 'false', 'clear', 'ps', 'netstat', 'ifconfig', 'ip', 'ss',
+                'curl', 'wget', 'nmap', 'awk', 'sed', 'sort', 'uniq', 'cut', 'base64', 'xxd', 'strings',
+                'dig', 'ping', 'ssh', 'sudo', 'su', 'tee', 'tr', 'xargs', 'rev', 'nl', 'tac', 'test', '[',
+                'nc', 'netcat', 'mysql', 'history', 'date', 'uptime', 'w', 'last', 'dmesg', 'free', 'df',
+                'du', 'mount', 'stat', 'ln', 'readlink', 'realpath', 'basename', 'dirname', 'sleep', 'wait',
+                'yes', 'openssl', 'sha256sum', 'md5sum', 'crontab', 'service', 'systemctl',
+            ] as const;
+
+            function redrawInputLine(commandText: string): void {
+                emitOutput(instance, '\r');
+                emitOutput(instance, '\x1b[K');
+                emitOutput(instance, `${instance.shell.getPrompt()}${commandText}`);
+            }
+
+            function listCwdEntries(): readonly string[] {
+                const vfs = instance.shell.getVFS() as VirtualFilesystem & {
+                    list?: (path: string) => readonly string[] | null;
+                };
+                const cwd = instance.shell.getCwd();
+                const listed = typeof vfs.list === 'function' ? vfs.list(cwd) : null;
+                if (listed !== null && listed !== undefined) return listed;
+                return vfs.readDir(cwd) ?? [];
+            }
+
+            function handleTabCompletion(): void {
+                const currentInput = instance.inputBuffer;
+                const match = currentInput.match(/(^|\s)([^\s]*)$/);
+                const fragment = match?.[2] ?? '';
+                const fragmentStart = currentInput.length - fragment.length;
+                const commandMatches = knownCommandCandidates
+                    .filter((cmd) => instance.shell.hasCommand(cmd))
+                    .filter((cmd) => cmd.startsWith(fragment));
+                const pathMatches = listCwdEntries().filter((entry) => entry.startsWith(fragment));
+                const matches = [...new Set([...commandMatches, ...pathMatches])].sort();
+
+                if (matches.length === 0) return;
+
+                if (matches.length === 1) {
+                    const completion = matches[0] ?? '';
+                    const completedInput = `${currentInput.slice(0, fragmentStart)}${completion}`;
+                    instance.inputBuffer = completedInput;
+                    redrawInputLine(completedInput);
+                    return;
+                }
+
+                emitOutput(instance, `\r\n${matches.join('  ')}\r\n`);
+                redrawInputLine(currentInput);
+            }
 
             // Send initial prompt (overlay has already been applied by the engine)
             setTimeout(() => {
@@ -239,6 +293,35 @@ export function createSimulacrumBackend(configs?: ReadonlyMap<string, Simulacrum
             return {
                 sendToVM(data: string | Uint8Array): void {
                     const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+
+                    if (text === '\x1b[A') {
+                        if (commandHistory.length === 0) return;
+                        if (historyIndex > 0) {
+                            historyIndex--;
+                        }
+                        const previousCommand = commandHistory[historyIndex] ?? '';
+                        instance.inputBuffer = previousCommand;
+                        redrawInputLine(previousCommand);
+                        return;
+                    }
+
+                    if (text === '\x1b[B') {
+                        if (commandHistory.length === 0) return;
+                        if (historyIndex < commandHistory.length) {
+                            historyIndex++;
+                        }
+                        const nextCommand = historyIndex === commandHistory.length
+                            ? ''
+                            : (commandHistory[historyIndex] ?? '');
+                        instance.inputBuffer = nextCommand;
+                        redrawInputLine(nextCommand);
+                        return;
+                    }
+
+                    if (text === '\t') {
+                        handleTabCompletion();
+                        return;
+                    }
 
                     // Echo printable characters
                     for (const ch of text) {
@@ -263,6 +346,19 @@ export function createSimulacrumBackend(configs?: ReadonlyMap<string, Simulacrum
                     }
 
                     instance.inputBuffer += text;
+
+                    const lineEnd = instance.inputBuffer.search(/[\r\n]/);
+                    if (lineEnd >= 0) {
+                        const executedCommand = instance.inputBuffer.slice(0, lineEnd);
+                        if (executedCommand.length > 0) {
+                            commandHistory.push(executedCommand);
+                            if (commandHistory.length > maxHistoryEntries) {
+                                commandHistory.shift();
+                            }
+                        }
+                        historyIndex = commandHistory.length;
+                    }
+
                     processInput(instance);
                 },
 

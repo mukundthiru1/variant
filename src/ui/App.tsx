@@ -52,6 +52,7 @@ import type { CapturedPacket } from './lenses/PacketCaptureLens';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useNotifications } from './hooks/useNotifications';
 import { NotificationToast } from './components/NotificationToast';
+import { HelpOverlay } from './components/HelpOverlay';
 
 // ── App State Machine ──────────────────────────────────────────
 
@@ -686,8 +687,25 @@ function SimulationScreen({
     // ── Compositor state ────────────────────────────────────────
     const [compositorState, dispatchCompositor] = useReducer(compositorReducer, undefined, createInitialState);
 
-    const { notifications, dismissNotification } = useNotifications();
+    const { notifications, dismissNotification, clearAll } = useNotifications();
     const { registerShortcut } = useKeyboardShortcuts();
+
+    const [helpOverlayVisible, setHelpOverlayVisible] = useState(false);
+    const [hintPanelVisible, setHintPanelVisible] = useState(false);
+    const [lastHint, setLastHint] = useState<string | null>(null);
+    const lastNonTerminalLensIdRef = useRef<string | null>(null);
+    const helpOverlayVisibleRef = useRef(false);
+    helpOverlayVisibleRef.current = helpOverlayVisible;
+
+    // Track last focused non-terminal lens for Ctrl+` toggle
+    useEffect(() => {
+        const fid = compositorState.focusedLensId;
+        if (fid === null) return;
+        const lens = compositorState.lenses.get(fid);
+        if (lens !== undefined && lens.type !== 'terminal') {
+            lastNonTerminalLensIdRef.current = fid;
+        }
+    }, [compositorState.focusedLensId, compositorState.lenses]);
 
     // ── Lens data refs (populated from event bus) ───────────────
     const emailsRef = useRef<readonly EmailMessage[]>([]);
@@ -884,6 +902,38 @@ function SimulationScreen({
             dispatchCompositor({ type: 'focus-lens', lensId: compositorState.taskbar[prevIdx]! });
         });
 
+        for (let i = 1; i <= 8; i++) {
+            const idx = i - 1;
+            registerShortcut(`ctrl+${i}`, () => {
+                if (compositorState.taskbar.length > idx) {
+                    const lensId = compositorState.taskbar[idx];
+                    if (lensId !== undefined) {
+                        dispatchCompositor({ type: 'focus-lens', lensId });
+                    }
+                }
+            });
+        }
+
+        registerShortcut('ctrl+`', () => {
+            const taskbar = compositorState.taskbar;
+            if (taskbar.length === 0) return;
+            const focusedId = compositorState.focusedLensId;
+            const focusedLens = focusedId !== null ? compositorState.lenses.get(focusedId) : undefined;
+            const terminalId = taskbar.find((id) => compositorState.lenses.get(id)?.type === 'terminal');
+            if (focusedLens?.type === 'terminal') {
+                const last = lastNonTerminalLensIdRef.current;
+                if (last !== null && compositorState.lenses.has(last)) {
+                    dispatchCompositor({ type: 'focus-lens', lensId: last });
+                }
+            } else if (terminalId !== undefined) {
+                dispatchCompositor({ type: 'focus-lens', lensId: terminalId });
+            }
+        });
+
+        registerShortcut('ctrl+h', () => { setHintPanelVisible((v) => !v); });
+        registerShortcut('f1', () => { setHelpOverlayVisible(true); });
+        registerShortcut('shift+?', () => { setHelpOverlayVisible(true); });
+
         registerShortcut('ctrl+w', () => {
             const focusedId = compositorState.focusedLensId;
             if (focusedId === null) return;
@@ -902,11 +952,17 @@ function SimulationScreen({
         });
 
         registerShortcut('escape', () => {
+            if (helpOverlayVisibleRef.current) {
+                setHelpOverlayVisible(false);
+                return;
+            }
             if (compositorState.maximizedLensId !== null) {
                 dispatchCompositor({ type: 'toggle-maximize', lensId: compositorState.maximizedLensId });
+                return;
             }
+            clearAll();
         });
-    }, [registerShortcut, handleOpenLens, compositorState, dispatchCompositor]);
+    }, [registerShortcut, handleOpenLens, compositorState, dispatchCompositor, clearAll]);
 
     // Inject xterm.js CSS on mount
     useEffect(() => { injectXtermCSS(); }, []);
@@ -1111,7 +1167,7 @@ function SimulationScreen({
         if (sim === null) return;
         const hint = sim.useHint();
         if (hint !== null) {
-            console.log('[HINT]', hint);
+            setLastHint(hint);
             setSimState(sim.getState());
         }
     }, []);
@@ -1308,6 +1364,52 @@ function SimulationScreen({
 
             {/* Notifications */}
             <NotificationToast notifications={notifications} onDismiss={dismissNotification} />
+
+            {/* Keyboard shortcuts help overlay */}
+            <HelpOverlay open={helpOverlayVisible} onClose={() => setHelpOverlayVisible(false)} />
+
+            {/* Hint panel (Ctrl+H to toggle) */}
+            {hintPanelVisible && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        bottom: '32px',
+                        left: '16px',
+                        right: '16px',
+                        maxWidth: '420px',
+                        padding: '12px 14px',
+                        background: '#0a0a0a',
+                        border: '1px solid rgba(212, 160, 58, 0.35)',
+                        borderRadius: '6px',
+                        color: '#e0e0e0',
+                        fontSize: '0.8rem',
+                        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                        zIndex: 9999,
+                    }}
+                >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ color: '#D4A03A', fontWeight: 600, fontSize: '0.7rem' }}>HINT</span>
+                        <button
+                            type="button"
+                            onClick={() => setHintPanelVisible(false)}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#666',
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                fontSize: '0.75rem',
+                            }}
+                        >
+                            Close
+                        </button>
+                    </div>
+                    <div style={{ color: '#999', lineHeight: 1.5 }}>
+                        {lastHint !== null ? lastHint : 'Use the HINT button in the status bar to request a hint.'}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -1354,9 +1456,11 @@ function StatusBar({
                     <>
                         <span style={{
                             color: simState.phase === 'running' ? '#3DA67A'
-                                : simState.phase === 'completed' ? '#f1fa8c'
+                                : simState.phase === 'completed' ? '#D4A03A'
                                     : simState.phase === 'failed' ? '#ff5555'
                                         : '#666',
+                            fontWeight: simState.phase === 'completed' ? 700 : 400,
+                            textShadow: simState.phase === 'completed' ? '0 0 8px rgba(212, 160, 58, 0.4)' : 'none',
                         }}>
                             {'\u25CF'} {simState.phase.toUpperCase()}
                         </span>
@@ -1417,37 +1521,188 @@ interface ObjectivePanelProps {
 }
 
 function ObjectivePanel({ objectives, status }: ObjectivePanelProps): JSX.Element {
-    return (
-        <div style={{
-            borderTop: '1px solid var(--border-default, #21262d)',
-            padding: '4px 12px',
-            background: 'var(--bg-secondary, #0d1117)',
-            fontSize: '0.65rem',
-            display: 'flex',
-            gap: '20px',
-            overflow: 'hidden',
-            flexShrink: 0,
-        }}>
-            {objectives.map(obj => {
-                const objStatus = status.get(obj.id) ?? 'locked';
-                const icon = objStatus === 'completed' ? '\u2713'
-                    : objStatus === 'available' ? '\u25CB'
-                        : objStatus === 'in-progress' ? '\u25D0'
-                            : '\u25CC';
-                const color = objStatus === 'completed' ? '#3DA67A'
-                    : objStatus === 'available' ? '#e0e0e0'
-                        : '#444';
+    // Track which objectives just completed for flash animation
+    const [flashCompleted, setFlashCompleted] = useState<Set<string>>(new Set());
+    // Track which objectives just unlocked for transition animation
+    const [newlyUnlocked, setNewlyUnlocked] = useState<Set<string>>(new Set());
+    const prevStatusRef = useRef<ReadonlyMap<string, import('../core/engine').ObjectiveStatus> | null>(null);
 
-                return (
-                    <div key={obj.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ color, fontSize: '0.8rem' }}>{icon}</span>
-                        <span style={{ color }}>
-                            {obj.title}
-                            {!obj.required && <span style={{ color: '#444', marginLeft: '4px' }}>(bonus)</span>}
+    // Detect status changes for animations
+    useEffect(() => {
+        const prevStatus = prevStatusRef.current;
+        if (prevStatus) {
+            const completed = new Set<string>();
+            const unlocked = new Set<string>();
+
+            for (const obj of objectives) {
+                const current = status.get(obj.id);
+                const previous = prevStatus.get(obj.id);
+
+                // Flash when transitioning to completed
+                if (current === 'completed' && previous !== 'completed') {
+                    completed.add(obj.id);
+                }
+                // Transition when unlocking
+                if (current === 'available' && previous === 'locked') {
+                    unlocked.add(obj.id);
+                }
+            }
+
+            if (completed.size > 0) {
+                setFlashCompleted(completed);
+                const timer = setTimeout(() => setFlashCompleted(new Set()), 500);
+                return () => clearTimeout(timer);
+            }
+            if (unlocked.size > 0) {
+                setNewlyUnlocked(unlocked);
+                const timer = setTimeout(() => setNewlyUnlocked(new Set()), 300);
+                return () => clearTimeout(timer);
+            }
+        }
+        prevStatusRef.current = status;
+    }, [status, objectives]);
+
+    // Calculate progress
+    const completedCount = objectives.filter(obj => status.get(obj.id) === 'completed').length;
+    const totalCount = objectives.length;
+    const requiredCount = objectives.filter(obj => obj.required).length;
+    const completedRequiredCount = objectives.filter(obj => obj.required && status.get(obj.id) === 'completed').length;
+    const allRequiredCompleted = requiredCount > 0 && completedRequiredCount === requiredCount;
+
+    // Calculate total score from completed objectives
+    const totalScore = objectives
+        .filter(obj => status.get(obj.id) === 'completed')
+        .reduce((sum, obj) => sum + (obj.reward ?? 0), 0);
+
+    return (
+        <div style={{ flexShrink: 0 }}>
+            {/* Mission Complete Banner */}
+            {allRequiredCompleted && (
+                <div style={{
+                    background: 'linear-gradient(90deg, rgba(212, 160, 58, 0.2) 0%, rgba(212, 160, 58, 0.4) 50%, rgba(212, 160, 58, 0.2) 100%)',
+                    borderTop: '1px solid rgba(212, 160, 58, 0.5)',
+                    padding: '6px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    animation: 'missionCompletePulse 0.5s ease-out',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#D4A03A', fontSize: '0.9rem' }}>★</span>
+                        <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.1em' }}>
+                            MISSION COMPLETE
                         </span>
                     </div>
-                );
-            })}
+                    <span style={{ color: '#D4A03A', fontSize: '0.7rem', fontWeight: 'bold' }}>
+                        SCORE: {totalScore} pts
+                    </span>
+                </div>
+            )}
+
+            {/* Objective Panel */}
+            <div style={{
+                borderTop: '1px solid var(--border-default, #21262d)',
+                background: 'var(--bg-secondary, #0d1117)',
+                fontSize: '0.7rem',
+                flexShrink: 0,
+            }}>
+                {/* Header with progress */}
+                <div style={{
+                    padding: '6px 12px',
+                    borderBottom: '1px solid var(--border-default, #21262d)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    color: '#8b949e',
+                }}>
+                    <span style={{ fontWeight: 'bold', letterSpacing: '0.05em' }}>OBJECTIVES</span>
+                    <span style={{ color: completedCount === totalCount ? '#3DA67A' : '#8b949e', transition: 'color 0.3s' }}>
+                        {completedCount}/{totalCount}
+                    </span>
+                </div>
+
+                {/* Scrollable objective list */}
+                <div style={{
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    padding: '6px 12px',
+                }}>
+                    {objectives.map(obj => {
+                        const objStatus = status.get(obj.id) ?? 'locked';
+                        const isFlashing = flashCompleted.has(obj.id);
+                        const isNewlyUnlocked = newlyUnlocked.has(obj.id);
+
+                        const icon = objStatus === 'completed' ? '\u2713'
+                            : objStatus === 'available' ? '\u25CB'
+                                : objStatus === 'in-progress' ? '\u25D0'
+                                    : '\u25CC';
+
+                        // Base colors with transition
+                        const baseColor = objStatus === 'completed' ? '#3DA67A'
+                            : objStatus === 'available' ? '#e0e0e0'
+                                : '#444';
+
+                        // Flash amber on completion
+                        const color = isFlashing ? '#D4A03A' : baseColor;
+                        const bgColor = isFlashing ? 'rgba(212, 160, 58, 0.15)' : 'transparent';
+
+                        return (
+                            <div
+                                key={obj.id}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '3px 0',
+                                    opacity: isNewlyUnlocked ? 1 : objStatus === 'locked' ? 0.4 : 1,
+                                    transform: isNewlyUnlocked ? 'translateX(4px)' : 'translateX(0)',
+                                    transition: 'all 0.3s ease',
+                                    backgroundColor: bgColor,
+                                    borderRadius: '2px',
+                                }}
+                            >
+                                <span style={{
+                                    color,
+                                    fontSize: '0.8rem',
+                                    transition: 'color 0.3s',
+                                    width: '14px',
+                                    textAlign: 'center',
+                                }}>{icon}</span>
+                                <span style={{
+                                    color,
+                                    transition: 'color 0.3s',
+                                    flex: 1,
+                                    textDecoration: objStatus === 'completed' ? 'line-through' : 'none',
+                                    textDecorationColor: '#3DA67A40',
+                                    opacity: objStatus === 'completed' ? 0.7 : 1,
+                                }}>
+                                    {obj.title}
+                                </span>
+                                {/* Bonus reward indicator */}
+                                {!obj.required && obj.reward !== undefined && obj.reward > 0 && (
+                                    <span style={{
+                                        color: objStatus === 'completed' ? '#3DA67A' : '#D4A03A',
+                                        fontSize: '0.6rem',
+                                        fontWeight: 'bold',
+                                        transition: 'color 0.3s',
+                                    }}>
+                                        +{obj.reward} pts
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* Animation keyframes */}
+            <style>{`
+                @keyframes missionCompletePulse {
+                    0% { opacity: 0; transform: translateY(-10px); }
+                    50% { opacity: 1; transform: translateY(0); }
+                    100% { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </div>
     );
 }

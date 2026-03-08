@@ -6,6 +6,7 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -74,8 +75,17 @@ const STEPS = [
 const SAMPLE_LEVELS = [
     { id: 'demo-01', title: 'The Leak', difficulty: 'BEGINNER', time: '~5 min', tags: ['Enumeration', 'Single machine'] },
     { id: 'web-01', title: 'Broken Auth', difficulty: 'INTERMEDIATE', time: '~15 min', tags: ['Web', 'JWT', 'SQLi'] },
-    { id: 'net-01', title: 'Lateral Move', difficulty: 'ADVANCED', time: '~30 min', tags: ['Network', 'Pivoting', 'Cred Relay'] },
+    { id: 'net-01', title: 'Lateral Move', difficulty: 'EXPERT', time: '~30 min', tags: ['Network', 'Pivoting', 'Cred Relay'] },
 ] as const;
+
+function getDifficultyColor(difficulty: string): string {
+    switch (difficulty) {
+        case 'BEGINNER': return '#22c55e';
+        case 'INTERMEDIATE': return '#d4a03a';
+        case 'EXPERT': return '#ef4444';
+        default: return '#d4a03a';
+    }
+}
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -105,9 +115,42 @@ function SectionSub({ children }: { children: ReactNode }): JSX.Element {
 
 // ── Landing Page ────────────────────────────────────────────────
 
+const VERSION = 'v1.0.0';
+
+const TAGLINE = 'Boot real Linux in your browser. Attack real protocols. Complete objectives. No servers. No data leaves your machine.';
+
 export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: LandingPageProps): JSX.Element {
+    const [displayedTagline, setDisplayedTagline] = useState('');
+    const [showGlow, setShowGlow] = useState(true);
+
+    useEffect(() => {
+        let index = 0;
+        const interval = setInterval(() => {
+            if (index <= TAGLINE.length) {
+                setDisplayedTagline(TAGLINE.slice(0, index));
+                index++;
+            } else {
+                clearInterval(interval);
+            }
+        }, 30);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setShowGlow(prev => !prev);
+        }, 1500);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <div style={{ background: C.bg, color: C.text, fontFamily: FONT_BODY, minHeight: '100vh', overflowX: 'hidden', scrollBehavior: 'smooth' }}>
+            <style>{`
+                @keyframes blink {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0; }
+                }
+            `}</style>
             {/* NAV */}
             <nav style={{
                 position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
@@ -165,21 +208,19 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                 <p style={{
                     fontFamily: FONT_BODY, fontSize: 'clamp(0.9rem, 2vw, 1rem)', color: C.muted,
                     marginTop: '1.25rem', maxWidth: '420px', lineHeight: 1.6, letterSpacing: '0.01em',
+                    minHeight: '3.2em',
                 }}>
-                    Boot real Linux in your browser. Attack real protocols.
-                    Complete objectives. No servers. No data leaves your machine.
+                    {displayedTagline}
+                    <span style={{ animation: 'blink 1s step-end infinite' }}>▋</span>
                 </p>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '2.5rem' }}>
                     <button type="button" onClick={onLaunch} style={{
                         padding: '12px 28px', fontSize: '0.85rem', fontWeight: 600, fontFamily: FONT_MONO,
                         color: C.bg, background: C.signal, border: 'none', borderRadius: '2px',
                         cursor: 'pointer', letterSpacing: '0.04em',
-                        boxShadow: `0 0 24px ${C.signalGlow}`,
-                        transition: 'all 200ms ease',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 0 32px ${C.signalGlow}`; }}
-                    onMouseLeave={e => { e.currentTarget.style.boxShadow = `0 0 24px ${C.signalGlow}`; }}
-                    >
+                        boxShadow: showGlow ? `0 0 40px ${C.signalGlow}` : `0 0 24px ${C.signalGlow}`,
+                        transition: 'box-shadow 0.3s ease',
+                    }}>
                         Launch Simulation
                     </button>
                     <button type="button" onClick={onMarketplace} style={{
@@ -193,6 +234,11 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                     >
                         Browse Levels
                     </button>
+                </div>
+                <div style={{
+                    marginTop: '1rem', fontSize: '0.7rem', fontFamily: FONT_MONO, color: C.dim,
+                }}>
+                    Press Enter to launch
                 </div>
                 <div style={{
                     marginTop: '4rem', fontSize: '0.65rem', fontFamily: FONT_MONO, color: C.dim,
@@ -215,7 +261,11 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                     {FEATURES.map((f) => (
                         <div key={f.title} style={{
                             padding: '1.5rem', background: C.bg,
-                        }}>
+                            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 12px rgba(0,0,0,0.4)`; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        >
                             <div style={{
                                 fontFamily: FONT_MONO, color: C.signal, fontSize: '0.7rem',
                                 fontWeight: 500, letterSpacing: '0.06em', marginBottom: '0.5rem',
@@ -288,8 +338,10 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                                 </span>
                                 <span style={{
                                     fontFamily: FONT_MONO, fontSize: '0.6rem', padding: '2px 8px',
-                                    border: `1px solid ${C.signal}30`, color: C.signal,
+                                    border: `1px solid ${getDifficultyColor(level.difficulty)}40`, 
+                                    color: getDifficultyColor(level.difficulty),
                                     borderRadius: '2px', letterSpacing: '0.04em',
+                                    background: `${getDifficultyColor(level.difficulty)}10`,
                                 }}>
                                     {level.difficulty}
                                 </span>
@@ -329,7 +381,9 @@ export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: L
                 <div style={{ marginBottom: '0.5rem' }}>
                     <span style={{ fontFamily: FONT_DISPLAY, color: C.signal, fontWeight: 600 }}>VARIANT</span>
                     <span style={{ margin: '0 0.5rem', color: C.dim }}>·</span>
-                    <span style={{ fontFamily: FONT_BODY, color: C.muted }}>Santh</span>
+                    <span style={{ fontFamily: FONT_BODY, color: C.muted }}>Powered by Santh</span>
+                    <span style={{ margin: '0 0.5rem', color: C.dim }}>·</span>
+                    <span style={{ fontFamily: FONT_MONO, color: C.dim, fontSize: '0.65rem' }}>{VERSION}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', fontFamily: FONT_MONO, fontSize: '0.65rem' }}>
                     <a href="https://santh.io" style={{ color: C.dim, textDecoration: 'none' }}>santh.io</a>
