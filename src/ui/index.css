@@ -1,16 +1,20 @@
 /**
- * VARIANT — CSS Design System
+ * VARIANT — Signal Design System
  *
- * Cybersecurity terminal aesthetic.
- * Matrix-green on deep black. Monospace everything.
- * Minimal chrome. Maximum information density.
+ * Adopts the Santh Signal Design System.
+ * VARIANT is the "threat" product — amber signal.
  *
  * Design philosophy:
- *   - Every pixel serves a purpose
+ *   - Monochrome field. Color is a semantic event.
  *   - The terminal IS the interface
- *   - Subtle glow effects suggest liveness
- *   - Status conveys urgency through color
+ *   - Amber appears when threats/vulns are found
+ *   - Maximum information density
+ *
+ * BRAND: santh.io → variant.santh.io → invariant.santh.io
+ * All share the same design DNA. VARIANT = amber, INVARIANT = blue.
  */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 /* ── Reset ──────────────────────────────────────────────────── */
 
@@ -28,53 +32,99 @@ html, body, #root {
   overflow: hidden;
 }
 
-/* ── Design Tokens ──────────────────────────────────────────── */
+/* ── Signal Design System — VARIANT (threat context) ──────── */
 
 :root {
-  /* Core palette */
-  --bg-primary: #0a0e14;
+  /* Core palette — Santh monochrome field */
+  --white: #FFFFFF;
+  --black: #000000;
+  --off-black: #0A0A0A;
+
+  /* Industrial grays */
+  --gray-50: #FAFAFA;
+  --gray-100: #F0F0F0;
+  --gray-200: #E0E0E0;
+  --gray-300: #C0C0C0;
+  --gray-400: #909090;
+  --gray-500: #707070;
+  --gray-600: #505050;
+  --gray-700: #383838;
+  --gray-800: #252525;
+  --gray-900: #181818;
+  --gray-950: #0E0E0E;
+
+  /* Surfaces — dark terminal aesthetic */
+  --bg-primary: var(--off-black);
   --bg-secondary: #0d1117;
   --bg-surface: #161b22;
   --bg-elevated: #1c2128;
 
-  /* Terminal green */
-  --green-dim: #0d3820;
-  --green-base: #00ff41;
-  --green-bright: #39ff14;
-  --green-muted: #00cc33;
-  --green-ghost: rgba(0, 255, 65, 0.06);
+  /* Signal: VARIANT = threat (amber) */
+  --signal: #D4A03A;
+  --signal-dim: rgba(212, 160, 58, 0.15);
+  --signal-glow: rgba(212, 160, 58, 0.25);
+  --signal-subtle: rgba(212, 160, 58, 0.06);
 
-  /* Accent colors (used sparingly) */
-  --red: #ff3333;
-  --red-dim: rgba(255, 51, 51, 0.15);
-  --amber: #ffaa00;
-  --amber-dim: rgba(255, 170, 0, 0.15);
-  --blue: #00aaff;
-  --blue-dim: rgba(0, 170, 255, 0.15);
-  --cyan: #00ffff;
+  /* Signal palette — named semantic colors */
+  --signal-threat: #D4A03A;
+  --signal-threat-dim: rgba(212, 160, 58, 0.15);
+  --signal-threat-glow: rgba(212, 160, 58, 0.25);
+  --signal-threat-subtle: rgba(212, 160, 58, 0.06);
+
+  --signal-defense: #4A9EFF;
+  --signal-defense-dim: rgba(74, 158, 255, 0.15);
+  --signal-defense-glow: rgba(74, 158, 255, 0.25);
+  --signal-defense-subtle: rgba(74, 158, 255, 0.06);
+
+  --signal-boundary: #C75450;
+  --signal-boundary-dim: rgba(199, 84, 80, 0.15);
+  --signal-boundary-glow: rgba(199, 84, 80, 0.25);
+  --signal-boundary-subtle: rgba(199, 84, 80, 0.06);
+
+  --signal-success: #3DA67A;
+  --signal-success-dim: rgba(61, 166, 122, 0.15);
+
+  /* Functional borders */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --border-default: #21262d;
+  --border-active: var(--signal);
+  --border-glow: var(--signal-glow);
+
+  /* Backward compat — old variable names map to new signal system */
+  --green-base: var(--signal);
+  --green-bright: var(--signal);
+  --green-muted: var(--signal);
+  --green-dim: var(--signal-dim);
+  --green-ghost: var(--signal-subtle);
+  --red: var(--signal-boundary);
+  --red-dim: var(--signal-boundary-dim);
+  --amber: var(--signal-threat);
+  --amber-dim: var(--signal-threat-dim);
+  --blue: var(--signal-defense);
+  --blue-dim: var(--signal-defense-dim);
+  --cyan: #4ECDC4;
   --purple: #8b5cf6;
 
   /* Text */
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #484f58;
-  --text-green: var(--green-base);
+  --text-signal: var(--signal);
 
-  /* Borders */
-  --border-default: #21262d;
-  --border-active: var(--green-muted);
-  --border-glow: rgba(0, 255, 65, 0.3);
+  /* Typography — Santh font stack */
+  --font-display: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  --font-body: 'Inter', -apple-system, system-ui, sans-serif;
+  --font-sans: var(--font-body);
 
-  /* Typography */
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Menlo', 'Monaco', monospace;
-  --font-sans: 'Inter', 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif;
-
-  --size-xs: 0.625rem;   /* 10px */
-  --size-sm: 0.75rem;    /* 12px */
-  --size-base: 0.875rem; /* 14px */
-  --size-lg: 1rem;       /* 16px */
-  --size-xl: 1.25rem;    /* 20px */
-  --size-2xl: 1.5rem;    /* 24px */
+  --size-xs: 0.625rem;
+  --size-sm: 0.75rem;
+  --size-base: 0.875rem;
+  --size-lg: 1rem;
+  --size-xl: 1.25rem;
+  --size-2xl: 1.5rem;
 
   /* Spacing */
   --space-1: 0.25rem;
@@ -90,14 +140,17 @@ html, body, #root {
   --radius-lg: 8px;
 
   /* Shadows */
-  --shadow-glow: 0 0 12px rgba(0, 255, 65, 0.15);
-  --shadow-glow-strong: 0 0 20px rgba(0, 255, 65, 0.25);
+  --shadow-glow: 0 0 12px var(--signal-glow);
+  --shadow-glow-strong: 0 0 20px var(--signal-glow);
   --shadow-drop: 0 4px 12px rgba(0, 0, 0, 0.5);
 
-  /* Transitions */
-  --transition-fast: 100ms ease-out;
-  --transition-base: 200ms ease-out;
-  --transition-slow: 400ms ease-out;
+  /* Easing — Santh mechanical */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-mechanical: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-fast: 100ms var(--ease-mechanical);
+  --transition-base: 200ms var(--ease-out);
+  --transition-slow: 400ms var(--ease-out);
 
   /* Z-index scale */
   --z-base: 1;
@@ -188,19 +241,19 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--green-base);
-  box-shadow: 0 0 6px var(--green-base);
+  background: var(--signal);
+  box-shadow: 0 0 6px var(--signal);
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
 .status-bar__dot--warning {
-  background: var(--amber);
-  box-shadow: 0 0 6px var(--amber);
+  background: var(--signal-threat);
+  box-shadow: 0 0 6px var(--signal-threat);
 }
 
 .status-bar__dot--error {
-  background: var(--red);
-  box-shadow: 0 0 6px var(--red);
+  background: var(--signal-boundary);
+  box-shadow: 0 0 6px var(--signal-boundary);
 }
 
 .status-bar__dot--idle {
@@ -223,7 +276,8 @@ body {
 }
 
 .title-bar__logo {
-  color: var(--green-base);
+  color: var(--signal);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: var(--size-sm);
   text-transform: uppercase;
@@ -283,7 +337,7 @@ body {
 }
 
 .objective-item:hover {
-  background: var(--green-ghost);
+  background: var(--signal-subtle);
 }
 
 .objective-item__icon {
@@ -297,9 +351,9 @@ body {
 }
 
 .objective-item--completed .objective-item__icon {
-  border-color: var(--green-base);
-  background: var(--green-base);
-  box-shadow: 0 0 6px var(--green-base);
+  border-color: var(--signal-success);
+  background: var(--signal-success);
+  box-shadow: 0 0 6px var(--signal-success);
 }
 
 .objective-item__text {
@@ -309,9 +363,9 @@ body {
 }
 
 .objective-item--completed .objective-item__text {
-  color: var(--green-muted);
+  color: var(--signal-success);
   text-decoration: line-through;
-  text-decoration-color: var(--green-dim);
+  text-decoration-color: var(--signal-success-dim);
 }
 
 /* ── Boot Screen ───────────────────────────────────────────── */
@@ -329,11 +383,11 @@ body {
 }
 
 .boot-screen__logo {
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-size: var(--size-2xl);
   font-weight: 700;
-  color: var(--green-base);
-  text-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+  color: var(--signal);
+  text-shadow: 0 0 20px var(--signal-glow);
   letter-spacing: 0.1em;
   margin-bottom: var(--space-8);
 }
@@ -342,7 +396,7 @@ body {
   width: 40px;
   height: 40px;
   border: 3px solid var(--border-default);
-  border-top-color: var(--green-base);
+  border-top-color: var(--signal);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-bottom: var(--space-4);
@@ -373,7 +427,7 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  color: var(--amber);
+  color: var(--signal);
   font-family: var(--font-mono);
   font-size: var(--size-xs);
   padding: var(--space-1) var(--space-2);
@@ -382,8 +436,8 @@ body {
 }
 
 .hint-button:hover {
-  border-color: var(--amber);
-  background: var(--amber-dim);
+  border-color: var(--signal);
+  background: var(--signal-dim);
 }
 
 .hint-button:disabled {
@@ -396,9 +450,9 @@ body {
 .score-display {
   font-family: var(--font-mono);
   font-size: var(--size-sm);
-  color: var(--green-base);
+  color: var(--signal);
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+  text-shadow: 0 0 8px var(--signal-glow);
 }
 
 /* ── Scrollbar ─────────────────────────────────────────────── */
@@ -424,7 +478,7 @@ body {
 /* ── Selection ─────────────────────────────────────────────── */
 
 ::selection {
-  background: rgba(0, 255, 65, 0.2);
+  background: var(--signal-dim);
   color: var(--text-primary);
 }
 

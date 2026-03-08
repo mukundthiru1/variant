@@ -19,7 +19,7 @@ compatibility_flags = ["nodejs_compat"]
 # ── Environment Variables ──────────────────────────────────────────
 [vars]
 ENVIRONMENT = "production"
-CORS_ORIGIN = "https://variant.santh.io"
+CORS_ORIGIN = "restricted"
 
 # ── Secrets (set via `wrangler secret put`) ────────────────────────
 # DATABASE_URL          — Neon direct connection (fallback if Hyperdrive unavailable)
