@@ -257,14 +257,10 @@ export function injectXtermCSS(): void {
     if (cssInjected) return;
     cssInjected = true;
 
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = '/node_modules/@xterm/xterm/css/xterm.css';
-
-    // Fallback: inject minimal CSS inline if the file doesn't load
-    link.onerror = () => {
-        const style = document.createElement('style');
-        style.textContent = `
+    // Inject xterm CSS inline — avoids 404 in production builds
+    // where node_modules is not served.
+    const style = document.createElement('style');
+    style.textContent = `
       .xterm {
         position: relative;
         user-select: none;
@@ -294,8 +290,5 @@ export function injectXtermCSS(): void {
         z-index: 4;
       }
     `;
-        document.head.appendChild(style);
-    };
-
-    document.head.appendChild(link);
+    document.head.appendChild(style);
 }
