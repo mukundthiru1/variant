@@ -15,12 +15,13 @@ import { useState, useCallback, useEffect, useRef, useReducer, useMemo } from 'r
 import type { TerminalIO } from '../core/vm/types';
 import type { Simulation, SimulationState } from '../core/engine';
 import { createSimulation } from '../core/engine';
-import { createV86Backend } from '../core/vm/v86-backend';
+import { createSimulacrumBackend } from '../backends/simulacrum';
+import { createBackendRouter } from '../backends/backend-router';
 import { injectXtermCSS } from '../modules/terminal';
 import { DEMO_01 } from '../levels/demo-01';
-import type { WorldSpec } from '../core/world/types';
-import type { LevelPackage } from '../lib/marketplace/types';
-import { createMarketplaceStore } from '../lib/marketplace';
+import type { WorldSpec, GameMode } from '../core/world/types';
+import type { LevelPackage, LevelDifficulty, LevelMetadata, LevelAuthor } from '../lib/marketplace/types';
+import { createMarketplaceStore, createLevelBuilder } from '../lib/marketplace';
 import { LandingPage } from './pages/LandingPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -82,9 +83,14 @@ export function App(): JSX.Element {
         setState({ screen: 'booting', levelId: pkg.id, levelPackage: pkg });
     }, []);
 
-    const handleSaveToMarketplace = useCallback(() => {
-        setState({ screen: 'marketplace' });
-    }, []);
+    const handleSaveToMarketplace = useCallback((pkg: LevelPackage) => {
+        marketplaceStore.importLevel(pkg).then(() => {
+            setState({ screen: 'marketplace' });
+        }).catch(err => {
+            console.error('Failed to import level:', err);
+            setState({ screen: 'marketplace' });
+        });
+    }, [marketplaceStore]);
 
     const handleError = useCallback((message: string) => {
         setState({ screen: 'error', message });
@@ -118,8 +124,9 @@ export function App(): JSX.Element {
             );
         case 'level-editor':
             return (
-                <LevelEditorPlaceholder
+                <LevelEditor
                     onSave={handleSaveToMarketplace}
+                    onTest={handlePlayLevel}
                     onBack={handleBackToLanding}
                     onSettings={handleSettings}
                 />
@@ -200,23 +207,143 @@ function MarketplaceNav({
     );
 }
 
-// ── Level Editor Placeholder ────────────────────────────────────
+// ── Level Editor ────────────────────────────────────────────────
 
-function LevelEditorPlaceholder({
+function LevelEditor({
     onSave,
+    onTest,
     onBack,
     onSettings,
 }: {
-    readonly onSave: () => void;
+    readonly onSave: (pkg: LevelPackage) => void;
+    readonly onTest: (pkg: LevelPackage) => void;
     readonly onBack: () => void;
     readonly onSettings: () => void;
 }): JSX.Element {
+    const [title, setTitle] = useState('');
+    const [slug, setSlug] = useState('');
+    const [description, setDescription] = useState('');
+    const [briefing, setBriefing] = useState('');
+    const [difficulty, setDifficulty] = useState<LevelDifficulty>('beginner');
+    const [mode, setMode] = useState<GameMode>('attack');
+    const [tags, setTags] = useState('');
+    const [estimatedMins, setEstimatedMins] = useState<number>(15);
+    
+    const initialJson = JSON.stringify({
+        version: "2.0",
+        trust: "community",
+        machines: {
+            "target": {
+                "hostname": "target",
+                "image": "alpine-nginx",
+                "memoryMB": 64,
+                "role": "target",
+                "interfaces": [{ "ip": "10.0.1.10", "segment": "lan" }]
+            }
+        },
+        startMachine: "target",
+        network: { "segments": [{ "id": "lan", "subnet": "10.0.1.0/24" }], "edges": [] },
+        credentials: [],
+        objectives: []
+    }, null, 2);
+
+    const [worldSpecJson, setWorldSpecJson] = useState(initialJson);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+
+    const parseAndValidate = async (): Promise<LevelPackage | null> => {
+        try {
+            setError(null);
+            setSuccess(null);
+            
+            let spec: WorldSpec;
+            try {
+                spec = JSON.parse(worldSpecJson) as WorldSpec;
+            } catch (err) {
+                throw new Error('Invalid JSON: ' + (err instanceof Error ? err.message : String(err)));
+            }
+            
+            if (!spec.machines || typeof spec.machines !== 'object') throw new Error('WorldSpec requires a "machines" object');
+            if (!spec.network || typeof spec.network !== 'object') throw new Error('WorldSpec requires a "network" object');
+            if (!spec.objectives || !Array.isArray(spec.objectives)) throw new Error('WorldSpec requires an "objectives" array');
+
+            const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+            
+            const metadata: LevelMetadata = {
+                title: title || 'Untitled',
+                tagline: slug || 'custom-level',
+                description: description || 'No description',
+                difficulty,
+                estimatedMinutes: estimatedMins,
+                tags: parsedTags,
+                mitreTechniques: [],
+                machineCount: Object.keys(spec.machines).length,
+                objectiveCount: spec.objectives.length,
+                skills: [],
+            };
+
+            const author: LevelAuthor = {
+                name: 'Level Designer',
+            };
+
+            const builder = createLevelBuilder();
+            const pkg = await builder.build(
+                {
+                    ...spec,
+                    meta: {
+                        title: title || 'Untitled',
+                        scenario: description || 'No description',
+                        briefing: briefing.split('\\n').filter(Boolean),
+                        difficulty,
+                        mode,
+                        vulnClasses: [],
+                        tags: parsedTags,
+                        estimatedMinutes: estimatedMins,
+                        author: { name: 'Level Designer', id: 'local', type: 'community' }
+                    }
+                },
+                metadata,
+                author
+            );
+
+            const errors = builder.validate(pkg);
+            if (errors.length > 0) {
+                throw new Error(`Validation failed: ${errors.join(', ')}`);
+            }
+            return pkg;
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : String(e));
+            return null;
+        }
+    };
+
+    const handleValidate = async () => {
+        const pkg = await parseAndValidate();
+        if (pkg !== null) {
+            setSuccess('Validation passed. WorldSpec is valid.');
+        }
+    };
+
+    const handleTest = async () => {
+        const pkg = await parseAndValidate();
+        if (pkg !== null) {
+            onTest(pkg);
+        }
+    };
+
+    const handleSave = async () => {
+        const pkg = await parseAndValidate();
+        if (pkg !== null) {
+            onSave(pkg);
+        }
+    };
+
     const containerStyle: React.CSSProperties = {
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        background: '#0a0a0a',
-        color: '#e0e0e0',
+        background: '#0A0A0A',
+        color: '#E0E0E0',
         fontFamily: '"JetBrains Mono", "Fira Code", monospace',
     };
     const barStyle: React.CSSProperties = {
@@ -225,27 +352,109 @@ function LevelEditorPlaceholder({
         alignItems: 'center',
         padding: '12px 16px',
         borderBottom: '1px solid #1a1a2e',
-        background: '#0d0d0d',
+        background: '#111111',
     };
-    const mainStyle: React.CSSProperties = {
-        flex: 1,
+    const inputStyle: React.CSSProperties = {
+        background: '#111111',
+        border: '1px solid #1a1a2e',
+        color: '#E0E0E0',
+        padding: '8px',
+        fontFamily: 'inherit',
+        fontSize: '0.85rem',
+        borderRadius: '2px',
+        width: '100%',
+        boxSizing: 'border-box' as const,
+    };
+    const labelStyle: React.CSSProperties = {
+        fontSize: '0.8rem',
+        color: '#D4A03A',
+        marginBottom: '4px',
+        display: 'block'
+    };
+    const columnStyle: React.CSSProperties = {
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#666',
-        fontSize: '0.9rem',
+        flexDirection: 'column',
+        gap: '12px',
+        flex: 1,
+        overflowY: 'auto',
+        paddingRight: '16px'
     };
+
     return (
         <div style={containerStyle}>
             <nav style={barStyle}>
                 <button type="button" onClick={onBack} style={navBtnStyle}>Back</button>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button type="button" onClick={onSave} style={{ ...navBtnStyle, color: '#00ff41' }}>Save to Marketplace</button>
+                    <button type="button" onClick={handleTest} style={navBtnStyle}>Test</button>
+                    <button type="button" onClick={handleSave} style={{ ...navBtnStyle, color: '#D4A03A' }}>Save to Marketplace</button>
                     <button type="button" onClick={onSettings} style={navBtnStyle}>Settings</button>
                 </div>
             </nav>
-            <main style={mainStyle}>
-                Level Editor — placeholder. Build levels here (editor UI coming next).
+            <main style={{ flex: 1, display: 'flex', padding: '16px', gap: '16px', overflow: 'hidden' }}>
+                <div style={columnStyle}>
+                    <h2 style={{ color: '#D4A03A', fontSize: '1.2rem', margin: '0 0 8px 0' }}>Level Metadata</h2>
+                    {error !== null && <div style={{ color: '#ff5555', background: 'rgba(255, 85, 85, 0.1)', padding: '8px', border: '1px solid #ff5555', borderRadius: '2px', fontSize: '0.85rem' }}>{error}</div>}
+                    {success !== null && <div style={{ color: '#3DA67A', background: 'rgba(61, 166, 122, 0.1)', padding: '8px', border: '1px solid #3DA67A', borderRadius: '2px', fontSize: '0.85rem' }}>{success}</div>}
+                    
+                    <div>
+                        <label style={labelStyle}>Title</label>
+                        <input value={title} onChange={e => setTitle(e.target.value)} style={inputStyle} placeholder="My Level" />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>Slug / Tagline</label>
+                        <input value={slug} onChange={e => setSlug(e.target.value)} style={inputStyle} placeholder="my-level" />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>Description</label>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} style={{ ...inputStyle, resize: 'vertical', minHeight: '60px' }} placeholder="Scenario description..." />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>Briefing (one line per bullet)</label>
+                        <textarea value={briefing} onChange={e => setBriefing(e.target.value)} style={{ ...inputStyle, resize: 'vertical', minHeight: '80px' }} placeholder="Objective 1...\\nObjective 2..." />
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={labelStyle}>Difficulty</label>
+                            <select value={difficulty} onChange={e => setDifficulty(e.target.value as LevelDifficulty)} style={inputStyle}>
+                                <option value="beginner">Beginner</option>
+                                <option value="easy">Easy</option>
+                                <option value="medium">Medium</option>
+                                <option value="hard">Hard</option>
+                                <option value="expert">Expert</option>
+                                <option value="insane">Insane</option>
+                            </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={labelStyle}>Mode</label>
+                            <select value={mode} onChange={e => setMode(e.target.value as GameMode)} style={inputStyle}>
+                                <option value="attack">Attack</option>
+                                <option value="defense">Defense</option>
+                                <option value="mixed">Mixed</option>
+                            </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={labelStyle}>Estimated Mins</label>
+                            <input type="number" value={estimatedMins} onChange={e => setEstimatedMins(parseInt(e.target.value) || 0)} style={inputStyle} />
+                        </div>
+                    </div>
+                    <div>
+                        <label style={labelStyle}>Tags (comma-separated)</label>
+                        <input value={tags} onChange={e => setTags(e.target.value)} style={inputStyle} placeholder="web, enumeration, beginner" />
+                    </div>
+                </div>
+
+                <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h2 style={{ color: '#D4A03A', fontSize: '1.2rem', margin: 0 }}>WorldSpec JSON</h2>
+                        <button type="button" onClick={handleValidate} style={navBtnStyle}>Validate</button>
+                    </div>
+                    <textarea 
+                        value={worldSpecJson} 
+                        onChange={e => setWorldSpecJson(e.target.value)}
+                        style={{ ...inputStyle, flex: 1, fontFamily: '"JetBrains Mono", "Fira Code", monospace', whiteSpace: 'pre', resize: 'none', lineHeight: '1.5' }}
+                        spellCheck={false}
+                    />
+                </div>
             </main>
         </div>
     );
@@ -305,10 +514,10 @@ function MenuScreen({
                 <h1 style={{
                     fontSize: '4rem',
                     fontWeight: 800,
-                    color: '#00ff41',
+                    color: '#D4A03A',
                     margin: 0,
                     letterSpacing: '-0.04em',
-                    textShadow: '0 0 30px rgba(0, 255, 65, 0.3)',
+                    textShadow: '0 0 30px rgba(212, 160, 58, 0.25)',
                 }}>
                     VARIANT
                 </h1>
@@ -334,8 +543,8 @@ function MenuScreen({
             }}
                 onClick={() => { onSelectLevel('demo-01'); }}
                 onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#00ff4160';
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(0, 255, 65, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(212, 160, 58, 0.38)';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(212, 160, 58, 0.08)';
                 }}
                 onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = '#1a1a2e';
@@ -343,12 +552,12 @@ function MenuScreen({
                 }}
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ color: '#00ff41', fontSize: '0.75rem', fontWeight: 600 }}>LEVEL 01</span>
+                    <span style={{ color: '#D4A03A', fontSize: '0.75rem', fontWeight: 600 }}>LEVEL 01</span>
                     <span style={{
                         fontSize: '0.65rem',
                         padding: '2px 8px',
-                        border: '1px solid #00ff4140',
-                        color: '#00ff41',
+                        border: '1px solid rgba(212, 160, 58, 0.25)',
+                        color: '#D4A03A',
                         borderRadius: '2px',
                     }}>
                         BEGINNER
@@ -635,7 +844,12 @@ function SimulationScreen({
         async function boot(): Promise<void> {
             try {
                 setBootMessage('Creating VM backend...');
-                const backend = createV86Backend();
+                const simulacrum = createSimulacrumBackend();
+                const backend = createBackendRouter({
+                    backends: new Map([['simulacrum', simulacrum]]),
+                    selector: () => 'simulacrum',
+                    fallback: 'simulacrum',
+                });
 
                 setBootMessage('Validating WorldSpec...');
                 const sim = createSimulation({
@@ -734,7 +948,7 @@ function SimulationScreen({
                         `<p style="color:#666;font-size:0.85rem">ERR_NAME_NOT_RESOLVED</p>` +
                         `<hr style="border:none;border-top:1px solid #333;margin:20px 0">` +
                         (availableDomains.length > 0
-                            ? `<p style="color:#666;font-size:0.8rem">Available services on this network:</p><ul style="color:#00ff41;font-size:0.8rem">${availableDomains.map(d => `<li><a href="http://${d}" style="color:#00aaff">${d}</a></li>`).join('')}</ul>`
+                            ? `<p style="color:#666;font-size:0.8rem">Available services on this network:</p><ul style="color:#D4A03A;font-size:0.8rem">${availableDomains.map(d => `<li><a href="http://${d}" style="color:#00aaff">${d}</a></li>`).join('')}</ul>`
                             : `<p style="color:#666;font-size:0.8rem">No HTTP services are available on this network.</p>`) +
                         `</body></html>`,
                     contentType: 'text/html',
@@ -938,8 +1152,8 @@ function SimulationScreen({
                 <div style={{
                     fontSize: '1.5rem',
                     fontWeight: 700,
-                    color: '#00ff41',
-                    textShadow: '0 0 20px rgba(0, 255, 65, 0.4)',
+                    color: '#D4A03A',
+                    textShadow: '0 0 20px rgba(212, 160, 58, 0.3)',
                     letterSpacing: '0.1em',
                     marginBottom: '2rem',
                 }}>
@@ -949,7 +1163,7 @@ function SimulationScreen({
                     width: '40px',
                     height: '40px',
                     border: '3px solid #21262d',
-                    borderTopColor: '#00ff41',
+                    borderTopColor: '#D4A03A',
                     borderRadius: '50%',
                     animation: 'spin 0.8s linear infinite',
                     marginBottom: '1rem',
@@ -1039,12 +1253,12 @@ function StatusBar({
             flexShrink: 0,
         }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ color: '#00ff41', fontWeight: 700 }}>VARIANT</span>
+                <span style={{ color: '#D4A03A', fontWeight: 700 }}>VARIANT</span>
 
                 {simState !== null && (
                     <>
                         <span style={{
-                            color: simState.phase === 'running' ? '#00ff41'
+                            color: simState.phase === 'running' ? '#3DA67A'
                                 : simState.phase === 'completed' ? '#f1fa8c'
                                     : simState.phase === 'failed' ? '#ff5555'
                                         : '#666',
@@ -1125,7 +1339,7 @@ function ObjectivePanel({ objectives, status }: ObjectivePanelProps): JSX.Elemen
                     : objStatus === 'available' ? '\u25CB'
                         : objStatus === 'in-progress' ? '\u25D0'
                             : '\u25CC';
-                const color = objStatus === 'completed' ? '#00ff41'
+                const color = objStatus === 'completed' ? '#3DA67A'
                     : objStatus === 'available' ? '#e0e0e0'
                         : '#444';
 

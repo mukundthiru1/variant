@@ -93,7 +93,7 @@ export function ProcessViewerLens({ processes, machineName, onRefresh, focused: 
         <div style={rootStyle}>
             <div style={toolbarStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#00ff41', fontWeight: 600 }}>PROCESSES</span>
+                    <span style={{ color: '#D4A03A', fontWeight: 600 }}>PROCESSES</span>
                     <span style={{ color: '#8b949e' }}>{machineName}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -142,7 +142,7 @@ export function ProcessViewerLens({ processes, machineName, onRefresh, focused: 
                         onClick={() => { setSelectedPid(proc.pid); }}
                         style={{
                             ...rowStyle,
-                            background: selectedPid === proc.pid ? 'rgba(0, 255, 65, 0.06)' : 'transparent',
+                            background: selectedPid === proc.pid ? 'rgba(212, 160, 58, 0.06)' : 'transparent',
                         }}
                     >
                         <div style={{ color: '#8be9fd' }}>{proc.pid}</div>
@@ -174,7 +174,7 @@ export function ProcessViewerLens({ processes, machineName, onRefresh, focused: 
 
             {selectedProcess !== null && (
                 <div style={detailsStyle}>
-                    <div style={{ color: '#00ff41', fontWeight: 600, marginBottom: '6px' }}>
+                    <div style={{ color: '#D4A03A', fontWeight: 600, marginBottom: '6px' }}>
                         Process {selectedProcess.pid} Details
                     </div>
                     <div style={detailRowStyle}><span>PID:</span><span>{selectedProcess.pid}</span></div>

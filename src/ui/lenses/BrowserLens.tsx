@@ -188,7 +188,7 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
     }, [response, url, navigate]);
 
     const statusColor = response === null ? '#666'
-        : response.status < 300 ? '#00ff41'
+        : response.status < 300 ? '#3DA67A'
             : response.status < 400 ? '#f1fa8c'
                 : response.status < 500 ? '#ffaa00'
                     : '#ff5555';
@@ -252,7 +252,7 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
                     onClick={() => { setViewSource(!viewSource); }}
                     style={{
                         ...navBtnStyle,
-                        color: viewSource ? '#00ff41' : '#666',
+                        color: viewSource ? '#D4A03A' : '#666',
                         fontSize: '0.65rem',
                     }}
                 >

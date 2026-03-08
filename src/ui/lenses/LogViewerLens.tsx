@@ -257,8 +257,8 @@ export function LogViewerLens({ logs, onRefresh, focused }: LogViewerLensProps):
                                     onClick={(event) => { handleToggleLine(absoluteIndex, entry.id, event); }}
                                     style={{
                                         ...styles.checkbox,
-                                        borderColor: isSelected ? '#00ff41' : '#444',
-                                        color: isSelected ? '#00ff41' : '#333',
+                                        borderColor: isSelected ? '#D4A03A' : '#444',
+                                        color: isSelected ? '#D4A03A' : '#333',
                                     }}
                                     title="Toggle line selection (Shift-click for range)"
                                 >
@@ -469,7 +469,7 @@ const styles: LogViewerStyles = {
         fontSize: '0.72rem',
     },
     tabActive: {
-        border: '1px solid #00ff41',
+        border: '1px solid #D4A03A',
         color: '#e6edf3',
         background: '#122018',
     },

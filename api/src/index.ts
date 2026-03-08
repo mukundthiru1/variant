@@ -898,6 +898,7 @@ function corsResponse(env: Env, response: Response, request?: Request): Response
         'https://variant.santh.io',
         'https://santh-variant.pages.dev',
         'http://localhost:5173',  // Vite dev server
+        'http://localhost:5174',
     ];
     const requestOrigin = request?.headers.get('Origin') ?? '';
     if (allowedOrigins === null) {

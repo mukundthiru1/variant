@@ -87,7 +87,7 @@ export function FileManagerLens({ onListDir, onReadFile, focused: _focused }: Fi
                 </button>
                 <div style={{ display: 'flex', gap: '2px', alignItems: 'center', overflow: 'hidden' }}>
                     <span
-                        style={{ cursor: 'pointer', color: '#00ff41' }}
+                        style={{ cursor: 'pointer', color: '#D4A03A' }}
                         onClick={() => { handleNavigate('/'); }}
                     >
                         /
@@ -139,10 +139,10 @@ export function FileManagerLens({ onListDir, onReadFile, focused: _focused }: Fi
                                     padding: '3px 8px',
                                     cursor: 'pointer',
                                     background: selectedFile === entry.path
-                                        ? 'rgba(0, 255, 65, 0.08)'
+                                        ? 'rgba(212, 160, 58, 0.08)'
                                         : 'transparent',
                                     borderLeft: selectedFile === entry.path
-                                        ? '2px solid #00ff41'
+                                        ? '2px solid #D4A03A'
                                         : '2px solid transparent',
                                 }}
                                 onMouseEnter={(e) => {

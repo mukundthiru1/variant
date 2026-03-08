@@ -123,7 +123,7 @@ function LayoutRenderer({ node, state, dispatch, renderLens, path }: LayoutRende
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
-                    border: focused ? '1px solid rgba(0, 255, 65, 0.2)' : '1px solid var(--border-default, #21262d)',
+                    border: focused ? '1px solid rgba(212, 160, 58, 0.2)' : '1px solid var(--border-default, #21262d)',
                     overflow: 'hidden',
                 }}
                 onClick={() => { dispatch({ type: 'focus-lens', lensId: lens.id }); }}
@@ -245,13 +245,13 @@ function SplitPane({ direction, ratio, onRatioChange, children }: SplitPaneProps
                 style={{
                     [isHorizontal ? 'width' : 'height']: '4px',
                     [isHorizontal ? 'cursor' : 'cursor']: isHorizontal ? 'col-resize' : 'row-resize',
-                    background: dragging ? 'rgba(0, 255, 65, 0.3)' : 'var(--border-default, #21262d)',
+                    background: dragging ? 'rgba(212, 160, 58, 0.3)' : 'var(--border-default, #21262d)',
                     flexShrink: 0,
                     transition: 'background 0.1s',
                     zIndex: 2,
                 }}
                 onMouseEnter={(e) => {
-                    if (!dragging) e.currentTarget.style.background = 'rgba(0, 255, 65, 0.15)';
+                    if (!dragging) e.currentTarget.style.background = 'rgba(212, 160, 58, 0.15)';
                 }}
                 onMouseLeave={(e) => {
                     if (!dragging) e.currentTarget.style.background = 'var(--border-default, #21262d)';
@@ -312,7 +312,7 @@ function TabGroup({ node, state, dispatch, renderLens, path }: TabGroupProps): J
                             style={{
                                 background: active ? 'var(--bg-primary, #0a0e14)' : 'transparent',
                                 border: 'none',
-                                borderBottom: active ? '2px solid #00ff41' : '2px solid transparent',
+                                borderBottom: active ? '2px solid #D4A03A' : '2px solid transparent',
                                 color: active ? '#e6edf3' : '#666',
                                 fontFamily: 'inherit',
                                 fontSize: '0.7rem',
@@ -366,7 +366,7 @@ function LensHeader({ lens, focused, dispatch, maximized }: LensHeaderProps): JS
         }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
                 <span style={{
-                    color: focused ? '#00ff41' : '#444',
+                    color: focused ? '#D4A03A' : '#444',
                     fontSize: '0.5rem',
                 }}>
                     {'\u25CF'}
@@ -440,8 +440,8 @@ function Taskbar({ state, dispatch }: TaskbarProps): JSX.Element {
                         onClick={() => { dispatch({ type: 'focus-lens', lensId }); }}
                         onDoubleClick={() => { dispatch({ type: 'toggle-maximize', lensId }); }}
                         style={{
-                            background: focused ? 'rgba(0, 255, 65, 0.08)' : 'transparent',
-                            border: focused ? '1px solid rgba(0, 255, 65, 0.2)' : '1px solid transparent',
+                            background: focused ? 'rgba(212, 160, 58, 0.08)' : 'transparent',
+                            border: focused ? '1px solid rgba(212, 160, 58, 0.2)' : '1px solid transparent',
                             borderRadius: '2px',
                             color: focused ? '#e6edf3' : '#666',
                             fontFamily: 'inherit',

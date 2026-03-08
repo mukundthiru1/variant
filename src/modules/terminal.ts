@@ -81,15 +81,15 @@ const TERMINAL_OPTIONS = {
     theme: {
         background: '#0a0a0a',
         foreground: '#e0e0e0',
-        cursor: '#00ff41',
+        cursor: '#D4A03A',
         cursorAccent: '#0a0a0a',
-        selectionBackground: '#00ff4130',
+        selectionBackground: 'rgba(212, 160, 58, 0.19)',
         selectionForeground: '#ffffff',
 
         // ANSI colors
         black: '#0a0a0a',
         red: '#ff5555',
-        green: '#00ff41',
+        green: '#3DA67A',
         yellow: '#f1fa8c',
         blue: '#6272a4',
         magenta: '#ff79c6',

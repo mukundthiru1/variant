@@ -148,7 +148,7 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
         <div style={rootStyle}>
             <aside style={sidebarStyle}>
                 <div style={accountStyle}>
-                    <div style={{ color: 'var(--green-base, #00ff41)', fontWeight: 600 }}>MAIL</div>
+                    <div style={{ color: 'var(--green-base, #D4A03A)', fontWeight: 600 }}>MAIL</div>
                     <div style={{ color: 'var(--text-secondary, #8b949e)' }}>{account}</div>
                 </div>
                 <button onClick={handleStartCompose} style={composeButtonStyle}>Compose</button>
@@ -162,9 +162,9 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
                             }}
                             style={{
                                 ...folderButtonStyle,
-                                background: activeFolder === folder ? 'rgba(0, 255, 65, 0.12)' : 'transparent',
-                                color: activeFolder === folder ? 'var(--green-base, #00ff41)' : 'var(--text-primary, #e6edf3)',
-                                borderColor: activeFolder === folder ? 'rgba(0, 255, 65, 0.45)' : 'transparent',
+                                background: activeFolder === folder ? 'rgba(212, 160, 58, 0.12)' : 'transparent',
+                                color: activeFolder === folder ? 'var(--green-base, #D4A03A)' : 'var(--text-primary, #e6edf3)',
+                                borderColor: activeFolder === folder ? 'rgba(212, 160, 58, 0.45)' : 'transparent',
                             }}
                         >
                             <span>{folderName(folder)}</span>
@@ -192,9 +192,9 @@ export function EmailLens({ account, emails, onSend, onMarkRead, focused }: Emai
                             }}
                             style={{
                                 ...emailRowStyle,
-                                background: selectedEmailId === email.id ? 'rgba(0, 255, 65, 0.08)' : 'transparent',
+                                background: selectedEmailId === email.id ? 'rgba(212, 160, 58, 0.08)' : 'transparent',
                                 borderLeft: selectedEmailId === email.id
-                                    ? '2px solid var(--green-base, #00ff41)'
+                                    ? '2px solid var(--green-base, #D4A03A)'
                                     : '2px solid transparent',
                                 fontWeight: email.read ? 400 : 600,
                             }}
@@ -456,9 +456,9 @@ const accountStyle: React.CSSProperties = {
 };
 
 const composeButtonStyle: React.CSSProperties = {
-    background: 'rgba(0, 255, 65, 0.16)',
-    border: '1px solid rgba(0, 255, 65, 0.45)',
-    color: 'var(--green-base, #00ff41)',
+    background: 'rgba(212, 160, 58, 0.16)',
+    border: '1px solid rgba(212, 160, 58, 0.45)',
+    color: 'var(--green-base, #D4A03A)',
     borderRadius: '6px',
     padding: '8px 10px',
     textAlign: 'left',
@@ -597,8 +597,8 @@ const secondaryButtonStyle: React.CSSProperties = {
 };
 
 const sendButtonStyle: React.CSSProperties = {
-    background: 'var(--green-base, #00ff41)',
-    border: '1px solid rgba(0, 255, 65, 0.85)',
+    background: 'var(--green-base, #D4A03A)',
+    border: '1px solid rgba(212, 160, 58, 0.85)',
     color: '#04130a',
     borderRadius: '5px',
     padding: '6px 12px',

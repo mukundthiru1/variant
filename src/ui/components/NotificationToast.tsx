@@ -9,7 +9,7 @@ export interface NotificationToastProps {
 
 const colors: Record<NotificationType, string> = {
     info: '#00aaff',
-    success: '#00ff41',
+    success: '#3DA67A',
     warning: '#ffb86c',
     error: '#ff5555',
     alert: '#bd93f9',

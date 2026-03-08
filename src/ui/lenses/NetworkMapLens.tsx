@@ -50,7 +50,7 @@ export interface TrafficFlow {
 const NODE_RADIUS = 22;
 
 const STATUS_COLORS: Record<NetworkNode['status'], string> = {
-    up: '#00ff41',
+    up: '#3DA67A',
     down: '#666',
     compromised: '#ff5555',
     unknown: '#f1fa8c',
@@ -243,7 +243,7 @@ export function NetworkMapLens({ nodes, edges, traffic, focused }: NetworkMapLen
     return (
         <div style={rootStyle}>
             <div style={toolbarStyle}>
-                <span style={{ color: '#00ff41', fontWeight: 600 }}>NETWORK MAP</span>
+                <span style={{ color: '#D4A03A', fontWeight: 600 }}>NETWORK MAP</span>
                 <span style={{ color: '#8b949e' }}>
                     {nodes.length} nodes | {edges.length} links | {traffic.length} flows
                 </span>

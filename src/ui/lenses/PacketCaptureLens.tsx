@@ -35,7 +35,7 @@ const PROTOCOL_COLORS: Readonly<Record<string, string>> = {
     TCP: '#8be9fd',
     UDP: '#f1fa8c',
     HTTP: '#50fa7b',
-    HTTPS: '#00ff41',
+    HTTPS: '#4A9EFF',
     DNS: '#bd93f9',
     ICMP: '#ffb86c',
     ARP: '#ff79c6',
@@ -113,7 +113,7 @@ export function PacketCaptureLens({ packets, capturing, onToggleCapture, onClear
         <div style={rootStyle}>
             <div style={toolbarStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: capturing ? '#ff5555' : '#00ff41', fontWeight: 600 }}>
+                    <span style={{ color: capturing ? '#ff5555' : '#D4A03A', fontWeight: 600 }}>
                         {capturing ? '\u25CF CAPTURING' : '\u25CB STOPPED'}
                     </span>
                     <span style={{ color: '#8b949e' }}>{packets.length} packets</span>
@@ -129,8 +129,8 @@ export function PacketCaptureLens({ packets, capturing, onToggleCapture, onClear
                     {onToggleCapture !== undefined && (
                         <button onClick={onToggleCapture} style={{
                             ...btnStyle,
-                            color: capturing ? '#ff5555' : '#00ff41',
-                            borderColor: capturing ? '#ff555540' : '#00ff4140',
+                            color: capturing ? '#ff5555' : '#D4A03A',
+                            borderColor: capturing ? '#ff555540' : 'rgba(212, 160, 58, 0.25)',
                         }}>
                             {capturing ? 'Stop' : 'Start'}
                         </button>
@@ -163,7 +163,7 @@ export function PacketCaptureLens({ packets, capturing, onToggleCapture, onClear
                             style={{
                                 ...rowStyle,
                                 background: selectedPacketId === pkt.id
-                                    ? 'rgba(0, 255, 65, 0.08)'
+                                    ? 'rgba(212, 160, 58, 0.08)'
                                     : absIdx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)',
                             }}
                         >
@@ -191,7 +191,7 @@ export function PacketCaptureLens({ packets, capturing, onToggleCapture, onClear
             {selectedPacket !== null && (
                 <div style={detailsStyle}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ color: '#00ff41', fontWeight: 600 }}>
+                        <span style={{ color: '#D4A03A', fontWeight: 600 }}>
                             Packet #{packets.indexOf(selectedPacket) + 1}
                         </span>
                         <span style={{ color: protocolColor(selectedPacket.protocol) }}>
