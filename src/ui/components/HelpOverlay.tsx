@@ -5,6 +5,8 @@
  * Signal Design System: #D4A03A accent, #0a0a0a background.
  */
 
+import { useEffect, useRef } from 'react';
+
 export interface HelpOverlayProps {
     readonly open: boolean;
     readonly onClose: () => void;
@@ -55,6 +57,14 @@ const shortcutCategories: ReadonlyArray<{
 ];
 
 export function HelpOverlay({ open, onClose }: HelpOverlayProps): JSX.Element {
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (open && closeButtonRef.current) {
+            closeButtonRef.current.focus();
+        }
+    }, [open]);
+
     if (!open) return <></>;
 
     return (
@@ -62,6 +72,7 @@ export function HelpOverlay({ open, onClose }: HelpOverlayProps): JSX.Element {
             role="dialog"
             aria-modal="true"
             aria-labelledby="help-overlay-title"
+            aria-describedby="help-overlay-desc"
             style={{
                 position: 'fixed',
                 inset: 0,
@@ -74,6 +85,11 @@ export function HelpOverlay({ open, onClose }: HelpOverlayProps): JSX.Element {
             }}
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose();
+            }}
+            onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                    onClose();
+                }
             }}
         >
             <div
@@ -111,8 +127,10 @@ export function HelpOverlay({ open, onClose }: HelpOverlayProps): JSX.Element {
                         Keyboard Shortcuts
                     </h2>
                     <button
+                        ref={closeButtonRef}
                         type="button"
                         onClick={onClose}
+                        aria-label="Close help overlay"
                         style={{
                             background: 'transparent',
                             border: BORDER,
@@ -136,7 +154,7 @@ export function HelpOverlay({ open, onClose }: HelpOverlayProps): JSX.Element {
                     </button>
                 </div>
 
-                <div style={{ padding: '12px 18px 18px' }}>
+                <div id="help-overlay-desc" style={{ padding: '12px 18px 18px' }}>
                     {shortcutCategories.map((cat) => (
                         <div key={cat.title} style={{ marginBottom: '18px' }}>
                             <h3

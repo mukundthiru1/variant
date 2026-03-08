@@ -1554,6 +1554,7 @@ function SimulationScreen({
                         <button
                             type="button"
                             onClick={() => setHintPanelVisible(false)}
+                            aria-label="Close hint panel"
                             style={{
                                 background: 'transparent',
                                 border: 'none',

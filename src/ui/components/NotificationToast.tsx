@@ -84,6 +84,7 @@ function ToastItem({ notif, onDismiss }: { readonly notif: NotificationItem; rea
                 </div>
                 <button
                     onClick={onDismiss}
+                    aria-label={`Dismiss ${notif.title} notification`}
                     style={{
                         background: 'transparent',
                         border: 'none',
