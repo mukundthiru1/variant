@@ -12,6 +12,8 @@ import type { CSSProperties, ReactNode } from 'react';
 export interface LandingPageProps {
     readonly onLaunch: () => void;
     readonly onMarketplace: () => void;
+    readonly onCreate?: () => void;
+    readonly onSettings?: () => void;
 }
 
 // ── Constants ───────────────────────────────────────────────────
@@ -103,7 +105,7 @@ function SectionSub({ children }: { children: ReactNode }): JSX.Element {
 
 // ── Landing Page ────────────────────────────────────────────────
 
-export function LandingPage({ onLaunch, onMarketplace }: LandingPageProps): JSX.Element {
+export function LandingPage({ onLaunch, onMarketplace, onCreate, onSettings }: LandingPageProps): JSX.Element {
     return (
         <div style={{ background: C.bg, color: C.text, fontFamily: FONT_BODY, minHeight: '100vh', overflowX: 'hidden', scrollBehavior: 'smooth' }}>
             {/* NAV */}
@@ -123,6 +125,16 @@ export function LandingPage({ onLaunch, onMarketplace }: LandingPageProps): JSX.
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <a href="#features" style={{ color: C.muted, textDecoration: 'none', fontSize: '0.75rem', fontFamily: FONT_MONO }}>Features</a>
                     <a href="#marketplace" style={{ color: C.muted, textDecoration: 'none', fontSize: '0.75rem', fontFamily: FONT_MONO }}>Levels</a>
+                    {onCreate !== undefined && (
+                        <button type="button" onClick={onCreate} style={{ color: C.muted, background: 'none', border: 'none', fontSize: '0.75rem', fontFamily: FONT_MONO, cursor: 'pointer' }}>
+                            Create
+                        </button>
+                    )}
+                    {onSettings !== undefined && (
+                        <button type="button" onClick={onSettings} style={{ color: C.muted, background: 'none', border: 'none', fontSize: '0.75rem', fontFamily: FONT_MONO, cursor: 'pointer' }}>
+                            Settings
+                        </button>
+                    )}
                     <button type="button" onClick={onLaunch} style={{
                         background: C.signal, color: C.bg, border: 'none', borderRadius: '2px',
                         padding: '6px 16px', fontSize: '0.75rem', fontWeight: 600, fontFamily: FONT_MONO,

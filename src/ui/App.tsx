@@ -172,10 +172,12 @@ export function App(): JSX.Element {
     switch (state.screen) {
         case 'landing':
             return (
-                <>
-                    <LandingNav onCreate={handleCreate} onSettings={handleSettings} />
-                    <LandingPage onLaunch={handleLaunch} onMarketplace={handleMarketplace} />
-                </>
+                <LandingPage
+                    onLaunch={handleLaunch}
+                    onMarketplace={handleMarketplace}
+                    onCreate={handleCreate}
+                    onSettings={handleSettings}
+                />
             );
         case 'menu':
             return (
@@ -217,38 +219,6 @@ export function App(): JSX.Element {
         case 'error':
             return <ErrorScreen message={state.message} onBack={handleBackToMenu} />;
     }
-}
-
-// ── Landing Nav (Create, Settings) ───────────────────────────────
-
-function LandingNav({
-    onCreate,
-    onSettings,
-}: {
-    readonly onCreate: () => void;
-    readonly onSettings: () => void;
-}): JSX.Element {
-    const barStyle: React.CSSProperties = {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        display: 'flex',
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        gap: '8px',
-        padding: '12px 16px',
-        background: 'rgba(10, 10, 10, 0.9)',
-        borderBottom: '1px solid #1a1a2e',
-        zIndex: 1000,
-        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-    };
-    return (
-        <nav style={barStyle}>
-            <button type="button" onClick={onCreate} style={navBtnStyle}>Create</button>
-            <button type="button" onClick={onSettings} style={navBtnStyle}>Settings</button>
-        </nav>
-    );
 }
 
 // ── Marketplace Nav (Back, Settings) ─────────────────────────────
