@@ -13,6 +13,26 @@
 
 import pg from 'pg';
 
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const GENERAL_RATE_LIMIT = 60;
+const AUTH_RATE_LIMIT = 10;
+const AUTH_RATE_LIMIT_PATHS = new Set(['/api/auth/register', '/api/auth/login']);
+
+interface RateLimitEntry {
+    count: number;
+    resetAt: number;
+}
+
+interface RateLimitResult {
+    limit: number;
+    remaining: number;
+    resetAt: number;
+    retryAfter?: number;
+    exceeded: boolean;
+}
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
 export interface Env {
     HYPERDRIVE: Hyperdrive;
     JWT_SECRET: string;
@@ -26,33 +46,123 @@ export default {
     async fetch(request: Request, env: Env): Promise<Response> {
         const url = new URL(request.url);
         const path = url.pathname;
+        const rateLimit = applyRateLimit(request, path);
 
         // CORS preflight
         if (request.method === 'OPTIONS') {
-            return corsResponse(env, new Response(null, { status: 204 }), request);
+            const response = withRateLimitHeaders(new Response(null, { status: 204 }), rateLimit);
+            return corsResponse(env, response, request);
         }
 
         try {
+            if (rateLimit.exceeded) {
+                const response = jsonResponse(
+                    { error: 'Too many requests', retryAfter: rateLimit.retryAfter ?? 0 },
+                    429,
+                );
+                response.headers.set('Retry-After', String(rateLimit.retryAfter ?? 0));
+                return corsResponse(env, withRateLimitHeaders(response, rateLimit), request);
+            }
+
             // Request size limit: 10MB (protects against payload DoS)
             const contentLength = request.headers.get('Content-Length');
             if (contentLength !== null && parseInt(contentLength, 10) > 10_485_760) {
-                return corsResponse(env, jsonResponse({ error: 'Request too large' }, 413), request);
+                const response = withRateLimitHeaders(jsonResponse({ error: 'Request too large' }, 413), rateLimit);
+                return corsResponse(env, response, request);
             }
 
             const response = await route(request, env, path, url);
-            return corsResponse(env, response, request);
+            return corsResponse(env, withRateLimitHeaders(response, rateLimit), request);
         } catch (error: unknown) {
             // Never leak internal error details to clients
             console.error('[VARIANT API] Unhandled error:', error instanceof Error ? error.message : String(error));
 
             if (error instanceof SyntaxError) {
-                return corsResponse(env, jsonResponse({ error: 'Invalid JSON in request body' }, 400), request);
+                const response = withRateLimitHeaders(jsonResponse({ error: 'Invalid JSON in request body' }, 400), rateLimit);
+                return corsResponse(env, response, request);
             }
 
-            return corsResponse(env, jsonResponse({ error: 'Internal server error' }, 500), request);
+            const response = withRateLimitHeaders(jsonResponse({ error: 'Internal server error' }, 500), rateLimit);
+            return corsResponse(env, response, request);
         }
     },
 };
+
+function getClientIP(request: Request): string {
+    const cfIP = request.headers.get('CF-Connecting-IP');
+    if (cfIP !== null && cfIP.trim().length > 0) {
+        return cfIP.trim();
+    }
+
+    const forwardedFor = request.headers.get('X-Forwarded-For');
+    if (forwardedFor !== null && forwardedFor.trim().length > 0) {
+        const first = forwardedFor.split(',')[0];
+        if (first !== undefined && first.trim().length > 0) {
+            return first.trim();
+        }
+    }
+
+    return 'unknown';
+}
+
+function applyRateLimit(request: Request, path: string): RateLimitResult {
+    const now = Date.now();
+
+    for (const [key, entry] of rateLimitStore.entries()) {
+        if (entry.resetAt < now) {
+            rateLimitStore.delete(key);
+        }
+    }
+
+    const isAuthPath = AUTH_RATE_LIMIT_PATHS.has(path);
+    const limit = isAuthPath ? AUTH_RATE_LIMIT : GENERAL_RATE_LIMIT;
+    const scope = isAuthPath ? 'auth' : 'general';
+    const key = `${scope}:${getClientIP(request)}`;
+    const existing = rateLimitStore.get(key);
+
+    if (existing === undefined || existing.resetAt < now) {
+        const resetAt = now + RATE_LIMIT_WINDOW_MS;
+        rateLimitStore.set(key, { count: 1, resetAt });
+        return {
+            limit,
+            remaining: limit - 1,
+            resetAt,
+            exceeded: false,
+        };
+    }
+
+    if (existing.count >= limit) {
+        const retryAfter = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+        return {
+            limit,
+            remaining: 0,
+            resetAt: existing.resetAt,
+            retryAfter,
+            exceeded: true,
+        };
+    }
+
+    existing.count += 1;
+    rateLimitStore.set(key, existing);
+
+    return {
+        limit,
+        remaining: Math.max(0, limit - existing.count),
+        resetAt: existing.resetAt,
+        exceeded: false,
+    };
+}
+
+function withRateLimitHeaders(response: Response, rateLimit: RateLimitResult): Response {
+    const headers = new Headers(response.headers);
+    headers.set('X-RateLimit-Remaining', String(rateLimit.remaining));
+    headers.set('X-RateLimit-Reset', String(Math.ceil(rateLimit.resetAt / 1000)));
+
+    return new Response(response.body, {
+        status: response.status,
+        headers,
+    });
+}
 
 // ── Router ────────────────────────────────────────────────────────
 

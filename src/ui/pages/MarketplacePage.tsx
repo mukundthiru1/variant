@@ -459,9 +459,9 @@ function chipStyle(active: boolean): CSSProperties {
     return {
         padding: '4px 10px',
         borderRadius: '999px',
-        border: `1px solid ${active ? '#00ff41' : '#21262d'}`,
-        background: active ? 'rgba(0, 255, 65, 0.14)' : '#0d1117',
-        color: active ? '#00ff41' : '#e6edf3',
+        border: `1px solid ${active ? '#D4A03A' : '#21262d'}`,
+        background: active ? 'rgba(212, 160, 58, 0.15)' : '#111111',
+        color: active ? '#D4A03A' : '#e6edf3',
         cursor: 'pointer',
         fontFamily: 'var(--font-mono)',
         fontSize: '0.72rem',
@@ -470,12 +470,12 @@ function chipStyle(active: boolean): CSSProperties {
 
 function difficultyBadgeStyle(difficulty: LevelDifficulty): CSSProperties {
     const colors: Record<LevelDifficulty, string> = {
-        beginner: '#00ff41',
-        easy: '#66ff99',
-        medium: '#f1e05a',
-        hard: '#ff9f43',
-        expert: '#ff6b6b',
-        insane: '#ff2d55',
+        beginner: '#3DA67A',
+        easy: '#66B08A',
+        medium: '#D4A03A',
+        hard: '#C75450',
+        expert: '#ff4444',
+        insane: '#ff2255',
     };
 
     return {
@@ -490,7 +490,7 @@ function difficultyBadgeStyle(difficulty: LevelDifficulty): CSSProperties {
 
 const rootStyle: CSSProperties = {
     minHeight: '100vh',
-    background: '#0a0e14',
+    background: '#0A0A0A',
     color: '#e6edf3',
     fontFamily: 'var(--font-mono)',
     padding: '20px',
@@ -507,7 +507,7 @@ const headerStyle: CSSProperties = {
 
 const titleStyle: CSSProperties = {
     margin: 0,
-    color: '#00ff41',
+    color: '#D4A03A',
     fontSize: '1.25rem',
     letterSpacing: '0.08em',
 };
@@ -516,7 +516,7 @@ const controlsPanelStyle: CSSProperties = {
     border: '1px solid #21262d',
     borderRadius: '8px',
     padding: '12px',
-    background: '#0d1117',
+    background: '#111111',
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
@@ -543,7 +543,7 @@ const searchInputStyle: CSSProperties = {
     flex: 1,
     minWidth: '220px',
     border: '1px solid #21262d',
-    background: '#0a0e14',
+    background: '#0A0A0A',
     color: '#e6edf3',
     borderRadius: '6px',
     padding: '8px 10px',
@@ -552,7 +552,7 @@ const searchInputStyle: CSSProperties = {
 
 const selectStyle: CSSProperties = {
     border: '1px solid #21262d',
-    background: '#0a0e14',
+    background: '#0A0A0A',
     color: '#e6edf3',
     borderRadius: '6px',
     padding: '8px 10px',
@@ -563,14 +563,14 @@ const importPanelStyle: CSSProperties = {
     border: '1px solid #21262d',
     borderRadius: '8px',
     padding: '12px',
-    background: '#0d1117',
+    background: '#111111',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
 };
 
 const panelTitleStyle: CSSProperties = {
-    color: '#00ff41',
+    color: '#D4A03A',
     fontSize: '0.9rem',
 };
 
@@ -578,16 +578,16 @@ const textAreaStyle: CSSProperties = {
     minHeight: '90px',
     border: '1px solid #21262d',
     borderRadius: '6px',
-    background: '#0a0e14',
+    background: '#0A0A0A',
     color: '#e6edf3',
     padding: '10px',
     fontFamily: 'var(--font-mono)',
 };
 
 const actionButtonStyle: CSSProperties = {
-    border: '1px solid #00ff41',
-    background: 'rgba(0, 255, 65, 0.12)',
-    color: '#00ff41',
+    border: '1px solid #D4A03A',
+    background: 'rgba(212, 160, 58, 0.12)',
+    color: '#D4A03A',
     borderRadius: '6px',
     padding: '7px 12px',
     cursor: 'pointer',
@@ -596,7 +596,7 @@ const actionButtonStyle: CSSProperties = {
 
 const secondaryButtonStyle: CSSProperties = {
     border: '1px solid #21262d',
-    background: '#0a0e14',
+    background: '#0A0A0A',
     color: '#e6edf3',
     borderRadius: '6px',
     padding: '7px 12px',
@@ -613,9 +613,9 @@ const cardsGridStyle: CSSProperties = {
 
 function cardStyle(expanded: boolean): CSSProperties {
     return {
-        border: `1px solid ${expanded ? '#00ff41' : '#21262d'}`,
+        border: `1px solid ${expanded ? '#D4A03A' : '#21262d'}`,
         borderRadius: '8px',
-        background: '#0d1117',
+        background: '#111111',
         padding: '12px',
         cursor: 'pointer',
         display: 'flex',
@@ -690,7 +690,7 @@ const screenshotStyle: CSSProperties = {
     objectFit: 'cover',
     borderRadius: '4px',
     border: '1px solid #21262d',
-    background: '#0a0e14',
+    background: '#0A0A0A',
 };
 
 const cardActionRowStyle: CSSProperties = {

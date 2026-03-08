@@ -45,6 +45,39 @@
     }
     </script>
 
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is VARIANT?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "VARIANT is a full-spectrum cybersecurity simulation engine that boots real Linux in your browser using v86 emulation. Practice penetration testing, network security, and incident response in an air-gapped environment — no servers, no data leaves your machine."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is VARIANT free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, VARIANT is free to use. All simulations run entirely in your browser."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does VARIANT require installation?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No installation needed. VARIANT runs entirely in your web browser using v86 x86 emulation and WebAssembly."
+          }
+        }
+      ]
+    }
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Preconnect to font CDN -->
@@ -56,6 +89,11 @@
       and by Cloudflare Pages (_headers file) in production.
       Required for SharedArrayBuffer (v86 performance).
     -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0A0A0A" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="VARIANT" />
   </head>
   <body>
     <div id="root"></div>
