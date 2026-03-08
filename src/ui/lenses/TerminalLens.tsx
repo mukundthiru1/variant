@@ -20,6 +20,12 @@ import type { LensContext } from '../lens/types';
 
 const OSC_PREFIX = '\x1b]777;';
 const OSC_TERMINATE = '\x07';
+const TERMINAL_FONT_SIZE_STORAGE_KEY = 'variant.terminal.font-size';
+const DEFAULT_TERMINAL_FONT_SIZE = 14;
+const MIN_TERMINAL_FONT_SIZE = 10;
+const MAX_TERMINAL_FONT_SIZE = 24;
+const COPY_TERMINAL_LINE_COUNT = 50;
+const SCANLINE_OVERLAY_BACKGROUND = 'repeating-linear-gradient(to bottom, rgba(224, 224, 224, 0.035) 0px, rgba(224, 224, 224, 0.035) 1px, rgba(10, 10, 10, 0) 3px, rgba(10, 10, 10, 0) 4px)';
 
 export interface TerminalLensProps {
     readonly terminalIO: TerminalIO | null;
@@ -93,6 +99,45 @@ const collectVisibleBufferText = (term: Terminal): string => {
     return lines.join('\n').trimEnd();
 };
 
+const clampTerminalFontSize = (value: number): number =>
+    Math.max(MIN_TERMINAL_FONT_SIZE, Math.min(MAX_TERMINAL_FONT_SIZE, Math.round(value)));
+
+const getStoredTerminalFontSize = (): number => {
+    if (typeof window === 'undefined') {
+        return DEFAULT_TERMINAL_FONT_SIZE;
+    }
+
+    const stored = window.localStorage.getItem(TERMINAL_FONT_SIZE_STORAGE_KEY);
+    if (stored === null) {
+        return DEFAULT_TERMINAL_FONT_SIZE;
+    }
+
+    const parsed = Number.parseInt(stored, 10);
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_TERMINAL_FONT_SIZE;
+    }
+
+    return clampTerminalFontSize(parsed);
+};
+
+const collectLastBufferLines = (term: Terminal, maxLines: number): string => {
+    const buffer = term.buffer.active;
+    const totalLines = buffer.length;
+    const startLine = Math.max(0, totalLines - Math.max(1, maxLines));
+    const lines: string[] = [];
+
+    for (let lineIndex = startLine; lineIndex < totalLines; lineIndex += 1) {
+        const line = buffer.getLine(lineIndex);
+        if (line === undefined) {
+            continue;
+        }
+
+        lines.push(line.translateToString(true));
+    }
+
+    return lines.join('\n').trimEnd();
+};
+
 const headerButtonStyle: CSSProperties = {
     minHeight: '24px',
     padding: '0 var(--space-2)',
@@ -115,6 +160,7 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
     const oscBufferRef = useRef<string>('');
     const fitTickRef = useRef<number>(0);
     const [isTerminalFullscreen, setIsTerminalFullscreen] = useState(false);
+    const [fontSize, setFontSize] = useState<number>(() => getStoredTerminalFontSize());
 
     const requestTerminalFit = useCallback(() => {
         if (fitTickRef.current !== 0) {
@@ -155,7 +201,9 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
             return;
         }
 
-        const content = collectVisibleBufferText(term);
+        const content =
+            collectLastBufferLines(term, COPY_TERMINAL_LINE_COUNT) ||
+            collectVisibleBufferText(term);
         if (content.length === 0) {
             return;
         }
@@ -176,6 +224,14 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
         }
 
         term.clear();
+    }, []);
+
+    const handleIncreaseFontSize = useCallback(() => {
+        setFontSize((current) => clampTerminalFontSize(current + 1));
+    }, []);
+
+    const handleDecreaseFontSize = useCallback(() => {
+        setFontSize((current) => clampTerminalFontSize(current - 1));
     }, []);
 
     // ── Handle VM output with OSC interception ──────────────────
@@ -269,6 +325,24 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
     }, [requestTerminalFit]);
 
     useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        window.localStorage.setItem(TERMINAL_FONT_SIZE_STORAGE_KEY, String(fontSize));
+    }, [fontSize]);
+
+    useEffect(() => {
+        const term = terminalInstanceRef.current;
+        if (term === null) {
+            return;
+        }
+
+        term.options.fontSize = fontSize;
+        requestTerminalFit();
+    }, [fontSize, requestTerminalFit]);
+
+    useEffect(() => {
         const root = rootRef.current;
         if (root === null || typeof document === 'undefined') {
             return;
@@ -338,6 +412,11 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
         }
     }, [requestTerminalFit]);
 
+    const machineHostname = lensContext?.instance.targetMachine ?? 'unknown-host';
+    const isConnected = terminalIO !== null;
+    const canDecreaseFontSize = fontSize > MIN_TERMINAL_FONT_SIZE;
+    const canIncreaseFontSize = fontSize < MAX_TERMINAL_FONT_SIZE;
+
     return (
         <div
             ref={rootRef}
@@ -352,6 +431,8 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
                 background: 'var(--bg-primary)',
                 overflow: 'hidden',
                 position: 'relative',
+                border: focused ? '1px solid rgba(212, 160, 58, 0.2)' : '1px solid rgba(212, 160, 58, 0.08)',
+                boxShadow: focused ? '0 0 0 1px rgba(212, 160, 58, 0.15), 0 0 22px rgba(212, 160, 58, 0.15)' : 'none',
             }}
         >
             <div
@@ -371,14 +452,49 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
             >
                 <div
                     style={{
-                        color: 'var(--signal)',
-                        fontFamily: 'var(--font-display)',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-2)',
                     }}
                 >
-                    Terminal
+                    <div
+                        style={{
+                            color: '#D4A03A',
+                            fontFamily: 'var(--font-display)',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                        }}
+                    >
+                        Terminal
+                    </div>
+                    <div
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            borderRadius: '999px',
+                            padding: '2px 8px',
+                            border: '1px solid rgba(212, 160, 58, 0.25)',
+                            background: '#0a0a0a',
+                            color: '#e0e0e0',
+                            fontSize: '11px',
+                            letterSpacing: '0.01em',
+                        }}
+                        title={isConnected ? `Connected to ${machineHostname}` : `Disconnected from ${machineHostname}`}
+                    >
+                        <span
+                            style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: isConnected ? '#3DA67A' : '#C75450',
+                                boxShadow: isConnected ? '0 0 8px rgba(61, 166, 122, 0.35)' : '0 0 8px rgba(199, 84, 80, 0.35)',
+                                flexShrink: 0,
+                            }}
+                        />
+                        <span>{machineHostname}</span>
+                    </div>
                 </div>
                 <div
                     style={{
@@ -387,12 +503,55 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
                         gap: 'var(--space-2)',
                     }}
                 >
+                    <div
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '2px',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid rgba(212, 160, 58, 0.2)',
+                            background: '#0a0a0a',
+                        }}
+                    >
+                        <button
+                            type="button"
+                            className="hint-button"
+                            onClick={handleDecreaseFontSize}
+                            style={headerButtonStyle}
+                            title="Decrease terminal font size"
+                            disabled={!canDecreaseFontSize}
+                        >
+                            A-
+                        </button>
+                        <span
+                            style={{
+                                minWidth: '28px',
+                                textAlign: 'center',
+                                color: '#e0e0e0',
+                                fontSize: '11px',
+                            }}
+                            title={`Current font size: ${fontSize}px`}
+                        >
+                            {fontSize}
+                        </span>
+                        <button
+                            type="button"
+                            className="hint-button"
+                            onClick={handleIncreaseFontSize}
+                            style={headerButtonStyle}
+                            title="Increase terminal font size"
+                            disabled={!canIncreaseFontSize}
+                        >
+                            A+
+                        </button>
+                    </div>
                     <button
                         type="button"
                         className="hint-button"
                         onClick={handleCopyToClipboard}
                         style={headerButtonStyle}
-                        title="Copy terminal output"
+                        title={`Copy last ${COPY_TERMINAL_LINE_COUNT} lines`}
                     >
                         Copy
                     </button>
@@ -417,17 +576,40 @@ export function TerminalLens({ terminalIO, lensContext, focused }: TerminalLensP
                 </div>
             </div>
             <div
-                ref={terminalHostRef}
                 style={{
                     flex: '1 1 auto',
                     minHeight: 0,
                     width: '100%',
                     overflow: 'hidden',
                     scrollBehavior: 'smooth',
-                    background: 'var(--bg-primary)',
-                    backgroundColor: 'var(--bg-primary)',
+                    background: '#0a0a0a',
+                    backgroundColor: '#0a0a0a',
+                    position: 'relative',
                 }}
-            />
+            >
+                <div
+                    ref={terminalHostRef}
+                    style={{
+                        height: '100%',
+                        width: '100%',
+                        overflow: 'hidden',
+                        scrollBehavior: 'smooth',
+                        background: '#0a0a0a',
+                        backgroundColor: '#0a0a0a',
+                    }}
+                />
+                <div
+                    aria-hidden="true"
+                    style={{
+                        position: 'absolute',
+                        inset: 0,
+                        pointerEvents: 'none',
+                        backgroundImage: SCANLINE_OVERLAY_BACKGROUND,
+                        opacity: 0.55,
+                        mixBlendMode: 'screen',
+                    }}
+                />
+            </div>
         </div>
     );
 }

@@ -431,7 +431,7 @@ export const DEMO_02: WorldSpec = {
         },
     ],
 
-    modules: ['objective-detector'],
+    modules: ['objective-detector', 'scoring-engine'],
 
     scoring: {
         maxScore: 100,

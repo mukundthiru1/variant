@@ -4,6 +4,7 @@ import { createSimulation, _resetSimIdCounter } from '../../src/core/engine';
 import { DEMO_01 } from '../../src/levels/demo-01';
 import { createModuleRegistry } from '../../src/core/modules';
 import { createObjectiveDetector } from '../../src/modules/objective-detector';
+import { createScoringEngine } from '../../src/modules/scoring-engine';
 
 // Minimal fake VMBackend that satisfies the VMBackend contract used by the
 // engine. It's intentionally simple — boots immediately and exposes the
@@ -69,6 +70,7 @@ describe('Engine — end-to-end integration', () => {
         _resetSimIdCounter();
         registry = createModuleRegistry();
         registry.register('objective-detector', createObjectiveDetector);
+        registry.register('scoring-engine', createScoringEngine);
         sim = null;
     });
 

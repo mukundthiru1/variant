@@ -170,6 +170,7 @@ export function createSimulation(options: CreateSimulationOptions): Simulation {
     let tick = 0;
     const startTime = Date.now();
     let hintsUsed = 0;
+    let currentScore = world.scoring.maxScore;
 
     const vmInstances = new Map<string, VMInstance>();
     const terminals = new Map<string, TerminalIO>();
@@ -437,7 +438,7 @@ export function createSimulation(options: CreateSimulationOptions): Simulation {
                 tick,
                 startTime,
                 elapsedMs: Date.now() - startTime,
-                score: world.scoring.maxScore,  // Base score — actual computed by scoring module
+                score: currentScore,
                 hintsUsed,
                 objectiveStatus: new Map(objectiveStatus),
             };
@@ -599,6 +600,16 @@ export function createSimulation(options: CreateSimulationOptions): Simulation {
 
                 // Set up objective listeners (engine-level tracking)
                 setupObjectiveListeners();
+
+                // Listen for score updates from the scoring module
+                events.onPrefix('custom:', (event) => {
+                    if (event.type === 'custom:score-update') {
+                        const data = event.data as { totalScore?: number } | null;
+                        if (data !== null && typeof data === 'object' && typeof data.totalScore === 'number') {
+                            currentScore = data.totalScore;
+                        }
+                    }
+                });
 
                 // ── Resolve and initialize modules ──────────────
                 if (world.modules.length > 0) {

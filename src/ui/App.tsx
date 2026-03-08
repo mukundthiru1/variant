@@ -19,6 +19,7 @@ import { createModuleRegistry } from '../core/modules';
 import { createSimulacrumBackend } from '../backends/simulacrum';
 import { createBackendRouter } from '../backends/backend-router';
 import { createObjectiveDetector } from '../modules/objective-detector';
+import { createScoringEngine } from '../modules/scoring-engine';
 import { injectXtermCSS } from '../modules/terminal';
 import { DEMO_01 } from '../levels/demo-01';
 import { DEMO_02 } from '../levels/demo-02';
@@ -984,6 +985,7 @@ function SimulationScreen({
                 setBootMessage('Initializing modules...');
                 const registry = createModuleRegistry();
                 registry.register('objective-detector', createObjectiveDetector);
+                registry.register('scoring-engine', createScoringEngine);
 
                 setBootMessage('Validating WorldSpec...');
                 const sim = createSimulation({
@@ -1055,6 +1057,11 @@ function SimulationScreen({
             }));
             unsubs.push(sim.events.on('objective:progress', () => {
                 setSimState(sim.getState());
+            }));
+            unsubs.push(sim.events.onPrefix('custom:', (event) => {
+                if (event.type === 'custom:score-update') {
+                    setSimState(sim.getState());
+                }
             }));
         }
 
