@@ -19,6 +19,10 @@ import { createSimulacrumBackend } from '../backends/simulacrum';
 import { createBackendRouter } from '../backends/backend-router';
 import { injectXtermCSS } from '../modules/terminal';
 import { DEMO_01 } from '../levels/demo-01';
+import { DEMO_02 } from '../levels/demo-02';
+import { DEMO_03 } from '../levels/demo-03';
+import { DEMO_04 } from '../levels/demo-04';
+import { DEMO_05 } from '../levels/demo-05';
 import type { WorldSpec, GameMode } from '../core/world/types';
 import type { LevelPackage, LevelDifficulty, LevelMetadata, LevelAuthor } from '../lib/marketplace/types';
 import { createMarketplaceStore, createLevelBuilder } from '../lib/marketplace';
@@ -59,6 +63,72 @@ type AppState =
     | { readonly screen: 'simulation'; readonly levelId: string; readonly levelPackage?: LevelPackage }
     | { readonly screen: 'error'; readonly message: string };
 
+type MenuLevel = {
+    readonly id: string;
+    readonly title: string;
+    readonly difficulty: string;
+    readonly time: string;
+    readonly desc: string;
+    readonly tags: readonly string[];
+};
+
+const formatTag = (tag: string): string =>
+    tag
+        .split('-')
+        .map(part => part.length > 0 ? `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}` : part)
+        .join(' ');
+
+const LEVEL_SPECS: Record<string, WorldSpec> = {
+    'demo-01': DEMO_01,
+    'demo-02': DEMO_02,
+    'demo-03': DEMO_03,
+    'demo-04': DEMO_04,
+    'demo-05': DEMO_05,
+};
+
+const LEVELS: readonly MenuLevel[] = [
+    {
+        id: 'demo-01',
+        title: 'The Leak',
+        difficulty: 'BEGINNER',
+        time: '~5 min',
+        desc: 'A company web server has an exposed backup directory. Find the admin credentials before the sysadmin rotates them.',
+        tags: ['Enumeration'],
+    },
+    {
+        id: 'demo-02',
+        title: DEMO_02.meta.title,
+        difficulty: DEMO_02.meta.difficulty.toUpperCase(),
+        time: `~${DEMO_02.meta.estimatedMinutes} min`,
+        desc: DEMO_02.meta.scenario,
+        tags: DEMO_02.meta.tags.map(formatTag).slice(0, 3),
+    },
+    {
+        id: 'demo-03',
+        title: DEMO_03.meta.title,
+        difficulty: DEMO_03.meta.difficulty.toUpperCase(),
+        time: `~${DEMO_03.meta.estimatedMinutes} min`,
+        desc: DEMO_03.meta.scenario,
+        tags: DEMO_03.meta.tags.map(formatTag).slice(0, 3),
+    },
+    {
+        id: 'demo-04',
+        title: DEMO_04.meta.title,
+        difficulty: DEMO_04.meta.difficulty.toUpperCase(),
+        time: `~${DEMO_04.meta.estimatedMinutes} min`,
+        desc: DEMO_04.meta.scenario,
+        tags: DEMO_04.meta.tags.map(formatTag).slice(0, 3),
+    },
+    {
+        id: 'demo-05',
+        title: DEMO_05.meta.title,
+        difficulty: DEMO_05.meta.difficulty.toUpperCase(),
+        time: `~${DEMO_05.meta.estimatedMinutes} min`,
+        desc: DEMO_05.meta.scenario,
+        tags: DEMO_05.meta.tags.map(formatTag).slice(0, 3),
+    },
+] as const;
+
 // ── App Component ──────────────────────────────────────────────
 
 export function App(): JSX.Element {
@@ -97,7 +167,7 @@ export function App(): JSX.Element {
     }, []);
 
     const worldSpecForSimulation = (s: { levelId: string; levelPackage?: LevelPackage }): WorldSpec =>
-        s.levelPackage?.worldSpec ?? DEMO_01;
+        s.levelPackage?.worldSpec ?? LEVEL_SPECS[s.levelId] ?? DEMO_01;
 
     switch (state.screen) {
         case 'landing':
@@ -487,12 +557,14 @@ function MenuScreen({
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
             height: '100vh',
-            background: '#0a0a0a',
+            background: '#0A0A0A',
             color: '#e0e0e0',
             fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-            overflow: 'hidden',
+            overflowY: 'auto',
+            padding: '72px 24px 56px 24px',
+            boxSizing: 'border-box',
         }}>
             <div style={{
                 position: 'absolute',
@@ -533,47 +605,77 @@ function MenuScreen({
             </div>
 
             <div style={{
-                width: '460px',
-                border: '1px solid #1a1a2e',
-                borderRadius: '2px',
-                padding: '24px',
-                background: '#0d0d0d',
-                cursor: 'pointer',
-                transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-            }}
-                onClick={() => { onSelectLevel('demo-01'); }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(212, 160, 58, 0.38)';
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(212, 160, 58, 0.08)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#1a1a2e';
-                    e.currentTarget.style.boxShadow = 'none';
-                }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ color: '#D4A03A', fontSize: '0.75rem', fontWeight: 600 }}>LEVEL 01</span>
-                    <span style={{
-                        fontSize: '0.65rem',
-                        padding: '2px 8px',
-                        border: '1px solid rgba(212, 160, 58, 0.25)',
-                        color: '#D4A03A',
-                        borderRadius: '2px',
-                    }}>
-                        BEGINNER
-                    </span>
-                </div>
-                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#e0e0e0', margin: '0 0 8px 0' }}>
-                    The Leak
-                </h2>
-                <p style={{ fontSize: '0.8rem', color: '#666', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-                    A company web server has an exposed backup directory. Find the admin credentials before the sysadmin rotates them.
-                </p>
-                <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: '#444' }}>
-                    <span>~5 min</span>
-                    <span>Single machine</span>
-                    <span>Enumeration</span>
-                </div>
+                width: 'min(1100px, 100%)',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '16px',
+            }}>
+                {LEVELS.map((level, index) => (
+                    <button
+                        key={level.id}
+                        type="button"
+                        onClick={() => { onSelectLevel(level.id); }}
+                        style={{
+                            border: '1px solid #262626',
+                            borderRadius: '4px',
+                            padding: '18px',
+                            background: '#111111',
+                            cursor: 'pointer',
+                            transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease',
+                            textAlign: 'left',
+                            color: 'inherit',
+                            fontFamily: 'inherit',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = 'rgba(212, 160, 58, 0.6)';
+                            e.currentTarget.style.boxShadow = '0 0 20px rgba(212, 160, 58, 0.1)';
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = '#262626';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.transform = 'translateY(0px)';
+                        }}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <span style={{ color: '#D4A03A', fontSize: '0.72rem', fontWeight: 600 }}>
+                                LEVEL {String(index + 1).padStart(2, '0')}
+                            </span>
+                            <span style={{
+                                fontSize: '0.65rem',
+                                padding: '2px 8px',
+                                border: '1px solid rgba(212, 160, 58, 0.45)',
+                                color: '#D4A03A',
+                                borderRadius: '2px',
+                            }}>
+                                {level.difficulty}
+                            </span>
+                        </div>
+                        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#e0e0e0', margin: '0 0 10px 0' }}>
+                            {level.title}
+                        </h2>
+                        <p style={{ fontSize: '0.8rem', color: '#888', lineHeight: 1.5, margin: '0 0 14px 0' }}>
+                            {level.desc}
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.7rem', color: '#666' }}>
+                            <span>{level.time}</span>
+                            {level.tags.map(tag => (
+                                <span
+                                    key={tag}
+                                    style={{
+                                        border: '1px solid #2f2f2f',
+                                        background: '#141414',
+                                        color: '#9a9a9a',
+                                        borderRadius: '2px',
+                                        padding: '2px 6px',
+                                    }}
+                                >
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    </button>
+                ))}
             </div>
 
             <p style={{
@@ -1273,40 +1375,40 @@ function StatusBar({
 
             <div style={{ display: 'flex', gap: '4px' }}>
                 {/* Quick-open lens buttons */}
-                <button onClick={() => { onOpenLens('terminal', {}); }} style={statusBtnStyle} title="New Terminal">
+                <button type="button" onClick={() => { onOpenLens('terminal', {}); }} style={statusBtnStyle} title="New Terminal">
                     {'[>_]'}
                 </button>
-                <button onClick={() => { onOpenLens('browser', { url: 'about:blank' }); }} style={statusBtnStyle} title="Open Browser (Ctrl+Shift+B)">
+                <button type="button" onClick={() => { onOpenLens('browser', { url: 'about:blank' }); }} style={statusBtnStyle} title="Open Browser (Ctrl+Shift+B)">
                     {'[www]'}
                 </button>
-                <button onClick={() => { onOpenLens('email', {}); }} style={statusBtnStyle} title="Open Email (Ctrl+Shift+E)">
+                <button type="button" onClick={() => { onOpenLens('email', {}); }} style={statusBtnStyle} title="Open Email (Ctrl+Shift+E)">
                     {'[@]'}
                 </button>
-                <button onClick={() => { onOpenLens('file-manager', {}); }} style={statusBtnStyle} title="Open File Manager (Ctrl+Shift+F)">
+                <button type="button" onClick={() => { onOpenLens('file-manager', {}); }} style={statusBtnStyle} title="Open File Manager (Ctrl+Shift+F)">
                     {'[dir]'}
                 </button>
-                <button onClick={() => { onOpenLens('log-viewer', {}); }} style={statusBtnStyle} title="Open Log Viewer (Ctrl+Shift+L)">
+                <button type="button" onClick={() => { onOpenLens('log-viewer', {}); }} style={statusBtnStyle} title="Open Log Viewer (Ctrl+Shift+L)">
                     {'[log]'}
                 </button>
-                <button onClick={() => { onOpenLens('network-map', {}); }} style={statusBtnStyle} title="Network Map (Ctrl+Shift+N)">
+                <button type="button" onClick={() => { onOpenLens('network-map', {}); }} style={statusBtnStyle} title="Network Map (Ctrl+Shift+N)">
                     {'[net]'}
                 </button>
-                <button onClick={() => { onOpenLens('process-viewer', {}); }} style={statusBtnStyle} title="Process Viewer (Ctrl+Shift+P)">
+                <button type="button" onClick={() => { onOpenLens('process-viewer', {}); }} style={statusBtnStyle} title="Process Viewer (Ctrl+Shift+P)">
                     {'[ps]'}
                 </button>
-                <button onClick={() => { onOpenLens('packet-capture', {}); }} style={statusBtnStyle} title="Packet Capture (Ctrl+Shift+K)">
+                <button type="button" onClick={() => { onOpenLens('packet-capture', {}); }} style={statusBtnStyle} title="Packet Capture (Ctrl+Shift+K)">
                     {'[pcap]'}
                 </button>
 
                 <div style={{ width: '1px', background: '#21262d', margin: '0 4px' }} />
 
-                <button onClick={onHint} style={{ ...statusBtnStyle, color: '#f1fa8c' }}>
+                <button type="button" onClick={onHint} style={{ ...statusBtnStyle, color: '#f1fa8c' }}>
                     HINT
                 </button>
-                <button onClick={onSettings} style={statusBtnStyle} title="Settings">
+                <button type="button" onClick={onSettings} style={statusBtnStyle} title="Settings">
                     SETTINGS
                 </button>
-                <button onClick={onExit} style={{ ...statusBtnStyle, color: '#ff5555' }}>
+                <button type="button" onClick={onExit} style={{ ...statusBtnStyle, color: '#ff5555' }}>
                     EXIT
                 </button>
             </div>
