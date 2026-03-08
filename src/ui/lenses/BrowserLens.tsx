@@ -6,17 +6,13 @@
  * Internet module (or directly to a machine's web service), and
  * renders the HTML response.
  *
- * This is NOT an iframe. It's a sandboxed HTML renderer that:
- *   - Renders HTML/CSS from simulated servers
- *   - Intercepts link clicks to stay within the simulation
- *   - Supports form submission (POST to simulated endpoints)
- *   - Shows raw source via "View Source"
- *   - Cannot access the real internet (air-gapped)
+ * Browser chrome: back/forward/refresh, address bar, view-source.
+ * Content is rendered in a sandboxed container; link clicks and
+ * form submissions are intercepted and routed through the simulation.
  *
  * SECURITY: All content comes from the simulation's fabricated
- * HTTP services. The srcdoc iframe is sandboxed with no script
- * execution. Links are intercepted and re-routed through the
- * simulation's network fabric.
+ * HTTP services. Links and forms are re-routed through the
+ * simulation's network fabric. No real internet access.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -42,22 +38,29 @@ interface HistoryEntry {
     readonly title: string;
 }
 
+const CHROME_BG = '#111111';
+const CHROME_ACTIVE = '#D4A03A';
+const STATUS_BAR_BG = '#0A0A0A';
+const STATUS_BAR_TEXT = '#707070';
+const CONTENT_BG = '#ffffff';
+
 export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProps): JSX.Element {
     const [url, setUrl] = useState(initialUrl ?? 'about:blank');
     const [addressBar, setAddressBar] = useState(initialUrl ?? '');
     const [response, setResponse] = useState<BrowserResponse | null>(null);
     const [viewSource, setViewSource] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [responseTimeMs, setResponseTimeMs] = useState<number | null>(null);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
     const [historyIdx, setHistoryIdx] = useState(-1);
+    const [addressFocused, setAddressFocused] = useState(false);
     const addressRef = useRef<HTMLInputElement | null>(null);
-    const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    const contentRef = useRef<HTMLDivElement | null>(null);
 
     const navigate = useCallback((targetUrl: string, method?: string, body?: string) => {
         setLoading(true);
         setViewSource(false);
 
-        // Normalize URL
         let normalized = targetUrl.trim();
         if (!normalized.startsWith('http://') && !normalized.startsWith('https://') && normalized !== 'about:blank') {
             normalized = `http://${normalized}`;
@@ -69,14 +72,16 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
         if (normalized === 'about:blank') {
             setResponse({ status: 200, statusText: 'OK', headers: new Map(), body: '', contentType: 'text/html' });
             setLoading(false);
+            setResponseTimeMs(null);
             return;
         }
 
+        const start = performance.now();
         const resp = onNavigate(normalized, method, body);
+        setResponseTimeMs(Math.round(performance.now() - start));
         setResponse(resp);
         setLoading(false);
 
-        // Push to history
         const title = extractTitle(resp.body) || normalized;
         setHistory(prev => {
             const trimmed = prev.slice(0, historyIdx + 1);
@@ -85,7 +90,6 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
         setHistoryIdx(prev => prev + 1);
     }, [onNavigate, historyIdx]);
 
-    // Load initial URL
     useEffect(() => {
         if (initialUrl !== undefined && initialUrl !== 'about:blank') {
             navigate(initialUrl);
@@ -125,191 +129,216 @@ export function BrowserLens({ initialUrl, onNavigate, focused }: BrowserLensProp
         }
     }, [historyIdx, history, onNavigate]);
 
-    // Intercept link clicks inside the iframe
-    useEffect(() => {
-        const iframe = iframeRef.current;
-        if (iframe === null || response === null) return;
+    const handleContentClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+        const target = (e.target as Element).closest('a');
+        if (target === null) return;
+        const href = (target as HTMLAnchorElement).getAttribute('href');
+        if (href === null || href.startsWith('javascript:')) return;
+        e.preventDefault();
+        let resolved: string;
+        try {
+            resolved = new URL(href, url).href;
+        } catch {
+            resolved = href;
+        }
+        navigate(resolved);
+    }, [url, navigate]);
 
-        const handleLoad = (): void => {
-            try {
-                const doc = iframe.contentDocument;
-                if (doc === null) return;
+    const handleContentSubmit = useCallback((e: React.FormEvent<HTMLDivElement>) => {
+        const form = (e.target as Element).closest('form') as HTMLFormElement | null;
+        if (form === null) return;
+        e.preventDefault();
+        const formData = new FormData(form);
+        const method = (form.method || 'GET').toUpperCase();
+        const action = form.getAttribute('action') || url;
+        let resolved: string;
+        try {
+            resolved = new URL(action, url).href;
+        } catch {
+            resolved = action;
+        }
+        if (method === 'GET') {
+            const params = new URLSearchParams(Array.from(formData.entries()) as unknown as [string, string][]);
+            const sep = resolved.includes('?') ? '&' : '?';
+            navigate(params.toString() ? `${resolved}${sep}${params.toString()}` : resolved);
+        } else {
+            const params = new URLSearchParams(Array.from(formData.entries()) as unknown as [string, string][]);
+            navigate(resolved, 'POST', params.toString());
+        }
+    }, [url, navigate]);
 
-                // Intercept all link clicks
-                doc.addEventListener('click', (e: MouseEvent) => {
-                    const target = (e.target as Element).closest('a');
-                    if (target === null) return;
-
-                    const href = target.getAttribute('href');
-                    if (href === null || href.startsWith('javascript:')) return;
-
-                    e.preventDefault();
-
-                    // Resolve relative URLs
-                    let resolved: string;
-                    try {
-                        resolved = new URL(href, url).href;
-                    } catch {
-                        resolved = href;
-                    }
-                    navigate(resolved);
-                });
-
-                // Intercept form submissions
-                doc.addEventListener('submit', (e: SubmitEvent) => {
-                    e.preventDefault();
-                    const form = e.target as HTMLFormElement;
-                    const formData = new FormData(form);
-                    const method = (form.method || 'GET').toUpperCase();
-                    const action = form.action || url;
-
-                    let resolved: string;
-                    try {
-                        resolved = new URL(action, url).href;
-                    } catch {
-                        resolved = action;
-                    }
-
-                    if (method === 'GET') {
-                        const params = new URLSearchParams(formData as unknown as Record<string, string>);
-                        navigate(`${resolved}?${params.toString()}`);
-                    } else {
-                        const params = new URLSearchParams(formData as unknown as Record<string, string>);
-                        navigate(resolved, 'POST', params.toString());
-                    }
-                });
-            } catch {
-                // Cross-origin restrictions — expected for sandboxed iframes
-            }
-        };
-
-        iframe.addEventListener('load', handleLoad);
-        return () => { iframe.removeEventListener('load', handleLoad); };
-    }, [response, url, navigate]);
-
-    const statusColor = response === null ? '#666'
+    const statusColor = response === null ? STATUS_BAR_TEXT
         : response.status < 300 ? '#3DA67A'
             : response.status < 400 ? '#f1fa8c'
                 : response.status < 500 ? '#ffaa00'
                     : '#ff5555';
 
     return (
-        <div style={{
+        <>
+            <style>{`@keyframes browser-lens-spin { to { transform: rotate(360deg); } }`}</style>
+            <div style={{
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
-            background: 'var(--bg-primary, #0a0e14)',
+            background: CHROME_BG,
             color: 'var(--text-primary, #e6edf3)',
             fontFamily: 'var(--font-mono)',
             fontSize: '0.75rem',
         }}>
-            {/* Toolbar */}
+            {/* Browser chrome */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                background: 'var(--bg-secondary, #0d1117)',
-                borderBottom: '1px solid var(--border-default, #21262d)',
-                minHeight: '32px',
+                gap: '6px',
+                padding: '6px 10px',
+                background: CHROME_BG,
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                minHeight: '36px',
             }}>
-                {/* Nav buttons */}
-                <button onClick={handleBack} disabled={historyIdx <= 0} style={navBtnStyle}>
-                    {'<'}
+                <button
+                    type="button"
+                    onClick={handleBack}
+                    disabled={historyIdx <= 0}
+                    style={navBtnStyle(historyIdx <= 0)}
+                    aria-label="Back"
+                >
+                    ←
                 </button>
-                <button onClick={handleForward} disabled={historyIdx >= history.length - 1} style={navBtnStyle}>
-                    {'>'}
+                <button
+                    type="button"
+                    onClick={handleForward}
+                    disabled={historyIdx >= Math.max(0, history.length - 1)}
+                    style={navBtnStyle(historyIdx >= Math.max(0, history.length - 1))}
+                    aria-label="Forward"
+                >
+                    →
                 </button>
-                <button onClick={() => { navigate(url); }} style={navBtnStyle}>
-                    {loading ? '...' : 'R'}
+                <button
+                    type="button"
+                    onClick={() => { navigate(url); }}
+                    disabled={loading}
+                    style={navBtnStyle(false)}
+                    aria-label="Refresh"
+                >
+                    {loading ? (
+                        <span style={{
+                            display: 'inline-block',
+                            width: 10,
+                            height: 10,
+                            border: '2px solid rgba(255,255,255,0.2)',
+                            borderTopColor: CHROME_ACTIVE,
+                            borderRadius: '50%',
+                            animation: 'browser-lens-spin 0.6s linear infinite',
+                        }} />
+                    ) : (
+                        '⟳'
+                    )}
                 </button>
 
-                {/* Address bar */}
-                <form onSubmit={handleAddressSubmit} style={{ flex: 1, display: 'flex' }}>
+                <form onSubmit={handleAddressSubmit} style={{ flex: 1, display: 'flex', minWidth: 0 }}>
                     <input
                         ref={addressRef}
                         type="text"
                         value={addressBar}
                         onChange={(e) => { setAddressBar(e.target.value); }}
-                        placeholder="Enter URL..."
+                        onFocus={() => { setAddressFocused(true); }}
+                        onBlur={() => { setAddressFocused(false); }}
+                        placeholder="Enter URL and press Enter..."
                         style={{
                             flex: 1,
-                            background: 'var(--bg-elevated, #1c2128)',
-                            border: '1px solid var(--border-default, #21262d)',
-                            borderRadius: '3px',
+                            width: '100%',
+                            background: addressFocused ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.3)',
+                            border: `1px solid ${addressFocused ? CHROME_ACTIVE : 'rgba(255,255,255,0.12)'}`,
+                            borderRadius: '4px',
                             color: 'var(--text-primary, #e6edf3)',
-                            fontFamily: 'inherit',
-                            fontSize: '0.75rem',
-                            padding: '4px 8px',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.8rem',
+                            padding: '6px 10px',
                             outline: 'none',
+                            boxShadow: addressFocused ? `0 0 0 1px ${CHROME_ACTIVE}` : 'none',
                         }}
                         autoFocus={focused}
                     />
                 </form>
 
-                {/* View source toggle */}
                 <button
+                    type="button"
                     onClick={() => { setViewSource(!viewSource); }}
                     style={{
-                        ...navBtnStyle,
-                        color: viewSource ? '#D4A03A' : '#666',
-                        fontSize: '0.65rem',
+                        ...navBtnStyle(false),
+                        color: viewSource ? CHROME_ACTIVE : 'var(--text-muted, #707070)',
+                        fontSize: '0.7rem',
                     }}
+                    aria-label={viewSource ? 'View page' : 'View source'}
                 >
                     {'</>'}
                 </button>
             </div>
 
-            {/* Status bar */}
-            {response !== null && (
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '2px 8px',
-                    background: 'var(--bg-secondary, #0d1117)',
-                    borderBottom: '1px solid var(--border-default, #21262d)',
-                    fontSize: '0.65rem',
-                    color: '#666',
-                }}>
-                    <span style={{ color: statusColor }}>
-                        {response.status} {response.statusText}
-                    </span>
-                    <span>{response.contentType}</span>
-                    <span>{response.body.length} bytes</span>
-                </div>
-            )}
-
             {/* Content area */}
-            <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+            <div style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 0 }}>
                 {viewSource ? (
                     <pre style={{
-                        padding: '8px',
+                        padding: '12px',
                         margin: 0,
                         fontSize: '0.75rem',
                         lineHeight: 1.5,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-all',
                         color: '#8be9fd',
+                        background: '#0d1117',
                     }}>
                         {response?.body ?? ''}
                     </pre>
                 ) : (
-                    <iframe
-                        ref={iframeRef}
-                        srcDoc={response?.body ?? ''}
-                        sandbox="allow-same-origin allow-forms"
+                    <div
+                        ref={contentRef}
+                        onClick={handleContentClick}
+                        onSubmit={handleContentSubmit}
                         style={{
                             width: '100%',
-                            height: '100%',
-                            border: 'none',
-                            background: '#fff',
+                            minHeight: '100%',
+                            background: CONTENT_BG,
+                            color: '#1D1D1F',
                         }}
-                        title="VARIANT Browser"
-                    />
+                        className="browser-content-sandbox"
+                    >
+                        {response?.body != null && response.body !== '' ? (
+                            <div
+                                dangerouslySetInnerHTML={{ __html: response.body }}
+                                style={{ padding: 0, margin: 0 }}
+                            />
+                        ) : (
+                            <div style={{ padding: 16, color: '#707070' }}>No content</div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Status bar (bottom) */}
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '4px 10px',
+                background: STATUS_BAR_BG,
+                borderTop: '1px solid rgba(255,255,255,0.06)',
+                fontSize: '0.65rem',
+                color: STATUS_BAR_TEXT,
+                minHeight: '22px',
+            }}>
+                {response !== null && (
+                    <>
+                        <span style={{ color: statusColor }}>
+                            {response.status} {response.statusText}
+                        </span>
+                        <span>{response.contentType}</span>
+                        {responseTimeMs !== null && <span>{responseTimeMs} ms</span>}
+                    </>
                 )}
             </div>
         </div>
+        </>
     );
 }
 
@@ -320,15 +349,17 @@ function extractTitle(html: string): string {
     return match !== null ? match[1]!.trim() : '';
 }
 
-const navBtnStyle: React.CSSProperties = {
-    background: 'transparent',
-    border: '1px solid var(--border-default, #21262d)',
-    borderRadius: '3px',
-    color: '#666',
-    fontFamily: 'inherit',
-    fontSize: '0.75rem',
-    padding: '2px 8px',
-    cursor: 'pointer',
-    minWidth: '28px',
-    textAlign: 'center',
-};
+function navBtnStyle(disabled: boolean): React.CSSProperties {
+    return {
+        background: 'transparent',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: '4px',
+        color: disabled ? 'rgba(255,255,255,0.3)' : 'var(--text-secondary, #8b949e)',
+        fontFamily: 'inherit',
+        fontSize: '0.85rem',
+        padding: '4px 8px',
+        cursor: disabled ? 'default' : 'pointer',
+        minWidth: '28px',
+        textAlign: 'center',
+    };
+}

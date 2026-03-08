@@ -324,7 +324,7 @@ export const DEMO_04: WorldSpec = {
         stealthBonus: false,
         hintPenalty: 15,
         tiers: [
-            { name: 'MASTERY', minScore: 90, color: '#00ff41' },
+            { name: 'MASTERY', minScore: 90, color: '#D4A03A' },
             { name: 'PROFICIENT', minScore: 70, color: '#f1fa8c' },
             { name: 'COMPLETE', minScore: 50, color: '#6272a4' },
         ],
