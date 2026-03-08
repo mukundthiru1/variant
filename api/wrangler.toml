@@ -1,0 +1,27 @@
+name = "variant-api"
+main = "src/index.ts"
+compatibility_date = "2026-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Custom Domain ──────────────────────────────────────────────────
+# api.variant.santh.io → variant-api worker
+# [env.production]
+# routes = [
+#   { pattern = "api.variant.santh.io", custom_domain = true },
+# ]
+
+# ── Hyperdrive — Neon PostgreSQL (variant-db, separate from santh-intel) ──
+# Create with: wrangler hyperdrive create variant-db --connection-string="<neon_string>"
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = ""  # Fill after `wrangler hyperdrive create`
+
+# ── Environment Variables ──────────────────────────────────────────
+[vars]
+ENVIRONMENT = "production"
+CORS_ORIGIN = "https://variant.santh.io"
+
+# ── Secrets (set via `wrangler secret put`) ────────────────────────
+# DATABASE_URL          — Neon direct connection (fallback if Hyperdrive unavailable)
+# JWT_SECRET            — HMAC-SHA256 key for session tokens
+# ADMIN_API_KEY         — Admin operations

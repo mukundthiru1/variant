@@ -1,0 +1,16 @@
+{
+    "name": "variant-api",
+    "version": "0.1.0",
+    "private": true,
+    "description": "VARIANT marketplace API — Cloudflare Worker + Neon PostgreSQL",
+    "scripts": {
+        "dev": "wrangler dev",
+        "deploy": "wrangler deploy",
+        "migrate": "npx tsx migrations/run.ts"
+    },
+    "devDependencies": {
+        "@cloudflare/workers-types": "^4.20250301.0",
+        "typescript": "^5.7.2",
+        "wrangler": "^4.0.0"
+    }
+}

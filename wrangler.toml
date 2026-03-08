@@ -1,3 +1,10 @@
 name = "santh-variant"
-compatibility_date = "2025-01-01"
+compatibility_date = "2026-03-01"
 pages_build_output_dir = "./dist"
+
+# ── Custom Domain ──────────────────────────────────────────────────
+# Uncomment after DNS CNAME is set: variant.santh.io → santh-variant.pages.dev
+# [env.production]
+# routes = [
+#   { pattern = "variant.santh.io", custom_domain = true },
+# ]
