@@ -20,6 +20,8 @@ export interface FsReadEvent {
     readonly path: string;
     readonly user: string;
     readonly timestamp: number;
+    /** WorldSpec machine ID (set by engine, differs from hostname). */
+    readonly worldMachine?: string;
 }
 
 export interface FsWriteEvent {
@@ -101,6 +103,8 @@ export interface AuthEscalateEvent {
     readonly to: string;
     readonly method: string;
     readonly timestamp: number;
+    /** WorldSpec machine ID (set by engine, differs from hostname). */
+    readonly worldMachine?: string;
 }
 
 export interface AuthCredentialFoundEvent {

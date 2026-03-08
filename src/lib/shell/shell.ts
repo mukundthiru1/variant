@@ -35,7 +35,7 @@ export function createShell(config: ShellConfig): ScriptedShell {
     const commands = new Map<string, CommandHandler>();
     const services = config.services ?? [];
     const users = config.users ?? [];
-    const emit = config.emit;
+    let emit = config.emit;
     const resolveRemoteServices = config.resolveRemoteServices;
     const resolveRemoteHostname = config.resolveRemoteHostname;
 
@@ -289,6 +289,13 @@ export function createShell(config: ShellConfig): ScriptedShell {
                 return { output: `cat: ${arg}: No such file or directory\n`, exitCode: 1 };
             }
             parts.push(content);
+            // Emit fs:read so objective-detector can track file access
+            ctx.emit?.({
+                type: 'fs:read',
+                machine: ctx.hostname,
+                path: resolved,
+                user: ctx.user,
+            });
         }
         const result = parts.join('');
         return { output: result.endsWith('\n') ? result : result + '\n', exitCode: 0 };
@@ -411,6 +418,7 @@ export function createShell(config: ShellConfig): ScriptedShell {
             const fc = ctx.vfs.readFile(resolved);
             if (fc === null) return { output: `head: ${file}: No such file or directory\n`, exitCode: 1 };
             content = fc;
+            ctx.emit?.({ type: 'fs:read', machine: ctx.hostname, path: resolved, user: ctx.user });
         } else if (stdin !== undefined && stdin.length > 0) {
             content = stdin;
         } else {
@@ -435,6 +443,7 @@ export function createShell(config: ShellConfig): ScriptedShell {
             const fc = ctx.vfs.readFile(resolved);
             if (fc === null) return { output: `tail: ${file}: No such file or directory\n`, exitCode: 1 };
             content = fc;
+            ctx.emit?.({ type: 'fs:read', machine: ctx.hostname, path: resolved, user: ctx.user });
         } else if (stdin !== undefined && stdin.length > 0) {
             content = stdin;
         } else {
@@ -483,6 +492,7 @@ export function createShell(config: ShellConfig): ScriptedShell {
             const fileContent = ctx.vfs.readFile(resolved);
             if (fileContent === null) return { output: `grep: ${file}: No such file or directory\n`, exitCode: 2 };
             content = fileContent;
+            ctx.emit?.({ type: 'fs:read', machine: ctx.hostname, path: resolved, user: ctx.user });
         } else if (stdin !== undefined && stdin.length > 0) {
             content = stdin;
         } else {
@@ -1950,6 +1960,7 @@ export function createShell(config: ShellConfig): ScriptedShell {
 
         hasCommand(name: string) { return commands.has(name); },
         getVFS() { return vfs; },
+        setEmit(fn: (event: { type: string; [key: string]: unknown }) => void) { emit = fn; },
     };
 
     return shell;

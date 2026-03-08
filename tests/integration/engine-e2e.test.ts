@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createSimulation, _resetSimIdCounter } from '../../src/core/engine';
 import { DEMO_01 } from '../../src/levels/demo-01';
 import { createModuleRegistry } from '../../src/core/modules';
+import { createObjectiveDetector } from '../../src/modules/objective-detector';
 
 // Minimal fake VMBackend that satisfies the VMBackend contract used by the
 // engine. It's intentionally simple — boots immediately and exposes the
@@ -67,6 +68,7 @@ describe('Engine — end-to-end integration', () => {
     beforeEach(() => {
         _resetSimIdCounter();
         registry = createModuleRegistry();
+        registry.register('objective-detector', createObjectiveDetector);
         sim = null;
     });
 

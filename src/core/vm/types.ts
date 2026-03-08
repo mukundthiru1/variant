@@ -174,6 +174,16 @@ export interface VMBackend {
     /** Reset the VM to its initial boot state. */
     reset(vm: VMInstance): Promise<void>;
 
+    // ── Event emission ───────────────────────────────────────────
+
+    /**
+     * Set the event emitter for a VM instance.
+     * Called by the engine after boot to connect the VM's internal
+     * event sources (shell commands, services) to the simulation EventBus.
+     * Optional — backends that don't emit events can omit this.
+     */
+    setEmitter?(vmId: string, emit: (event: { type: string; [key: string]: unknown }) => void): void;
+
     // ── Lifecycle ───────────────────────────────────────────────
 
     /** Destroy the VM and release all resources. */

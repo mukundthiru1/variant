@@ -579,6 +579,17 @@ export function createSimulation(options: CreateSimulationOptions): Simulation {
                         await backend.applyOverlay(vm, { files });
                     }
 
+                    // Wire event emitter so shell commands emit to the EventBus
+                    // Events are tagged with the WorldSpec machine ID (not the VM internal ID)
+                    backend.setEmitter?.(vm.id, (event) => {
+                        const enriched = {
+                            ...event,
+                            worldMachine: machineId,
+                            timestamp: event['timestamp'] ?? Date.now(),
+                        };
+                        events.emit(enriched as import('./events').EngineEvent);
+                    });
+
                     // Attach terminal AFTER overlay so hostname/user are correct
                     if (spec.role === 'player') {
                         const termIO = backend.attachTerminal(vm);

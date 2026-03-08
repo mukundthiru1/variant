@@ -178,6 +178,12 @@ export function createSimulacrumBackend(configs?: ReadonlyMap<string, Simulacrum
     }
 
     const backend: VMBackend = {
+        setEmitter(vmId: string, emitFn: (event: { type: string; [key: string]: unknown }) => void): void {
+            const instance = instances.get(vmId);
+            if (instance !== undefined) {
+                instance.shell.setEmit(emitFn);
+            }
+        },
         async boot(config: VMBootConfig): Promise<VMInstance> {
             const id = `simulacrum-${nextSimId++}`;
             const simConfig = getConfigForImage(config.imageUrl);

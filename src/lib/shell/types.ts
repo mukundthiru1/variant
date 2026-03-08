@@ -64,6 +64,9 @@ export interface ScriptedShell {
 
     /** Get the underlying VFS (read-only access for inspection). */
     getVFS(): VirtualFilesystem;
+
+    /** Set the event emitter (for late-binding after engine creates EventBus). */
+    setEmit(emit: (event: { type: string; [key: string]: unknown }) => void): void;
 }
 
 // ── Result type ────────────────────────────────────────────────

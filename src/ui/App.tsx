@@ -15,8 +15,10 @@ import { useState, useCallback, useEffect, useRef, useReducer, useMemo } from 'r
 import type { TerminalIO } from '../core/vm/types';
 import type { Simulation, SimulationState } from '../core/engine';
 import { createSimulation } from '../core/engine';
+import { createModuleRegistry } from '../core/modules';
 import { createSimulacrumBackend } from '../backends/simulacrum';
 import { createBackendRouter } from '../backends/backend-router';
+import { createObjectiveDetector } from '../modules/objective-detector';
 import { injectXtermCSS } from '../modules/terminal';
 import { DEMO_01 } from '../levels/demo-01';
 import { DEMO_02 } from '../levels/demo-02';
@@ -923,6 +925,10 @@ function SimulationScreen({
                     fallback: 'simulacrum',
                 });
 
+                setBootMessage('Initializing modules...');
+                const registry = createModuleRegistry();
+                registry.register('objective-detector', createObjectiveDetector);
+
                 setBootMessage('Validating WorldSpec...');
                 const sim = createSimulation({
                     worldSpec,
@@ -930,6 +936,7 @@ function SimulationScreen({
                     imageBaseUrl: '/images',
                     biosUrl: '/v86/seabios.bin',
                     vgaBiosUrl: '/v86/vgabios.bin',
+                    moduleRegistry: registry,
                 });
 
                 if (destroyed) { sim.destroy(); return; }
@@ -976,14 +983,30 @@ function SimulationScreen({
         };
     }, [worldSpec]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Update sim state periodically
+    // Update sim state periodically + on objective completion
     useEffect(() => {
         const interval = setInterval(() => {
             const sim = simulationRef.current;
             if (sim !== null) { setSimState(sim.getState()); }
         }, 1000);
-        return () => { clearInterval(interval); };
-    }, []);
+
+        // Immediate update on objective events
+        const sim = simulationRef.current;
+        const unsubs: (() => void)[] = [];
+        if (sim !== null) {
+            unsubs.push(sim.events.on('objective:complete', () => {
+                setSimState(sim.getState());
+            }));
+            unsubs.push(sim.events.on('objective:progress', () => {
+                setSimState(sim.getState());
+            }));
+        }
+
+        return () => {
+            clearInterval(interval);
+            for (const unsub of unsubs) unsub();
+        };
+    }, [terminalIO]); // Re-subscribe when terminal connects (sim is ready)
 
     // ── Browser navigation handler ──────────────────────────────
     // Routes HTTP requests through the fabric's registered external

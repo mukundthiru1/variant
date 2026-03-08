@@ -88,6 +88,13 @@ export function createBackendRouter(config: BackendRouterConfig): VMBackend {
             await getOwner(vm).reset(vm);
         },
 
+        setEmitter(vmId: string, emit: (event: { type: string; [key: string]: unknown }) => void): void {
+            // Forward to all backends — only the owning backend will have this VM
+            for (const backend of config.backends.values()) {
+                backend.setEmitter?.(vmId, emit);
+            }
+        },
+
         destroy(vm: VMInstance): void {
             const owner = vmOwners.get(vm.id);
             if (owner !== undefined) {

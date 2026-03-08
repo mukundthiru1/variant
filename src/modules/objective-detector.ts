@@ -29,7 +29,7 @@
 
 import type { Module, SimulationContext, Capability } from '../core/modules';
 import type { Unsubscribe, EventBus } from '../core/events';
-import type { ObjectiveSpec, ObjectiveDetails } from '../core/world/types';
+import type { ObjectiveSpec, ObjectiveDetails, CredentialEntry } from '../core/world/types';
 
 // ── Module ID ──────────────────────────────────────────────────
 
@@ -52,6 +52,7 @@ export function createObjectiveDetector(): Module {
     function setupTracker(
         spec: ObjectiveSpec,
         events: EventBus,
+        credentials: readonly CredentialEntry[],
     ): ObjectiveTracker {
         const tracker: ObjectiveTracker = {
             spec,
@@ -69,7 +70,7 @@ export function createObjectiveDetector(): Module {
                 setupReadDataTracker(tracker, events, details);
                 break;
             case 'credential-find':
-                setupCredentialFindTracker(tracker, events, details);
+                setupCredentialFindTracker(tracker, events, details, credentials);
                 break;
             case 'escalate':
                 setupEscalateTracker(tracker, events, details);
@@ -139,7 +140,9 @@ export function createObjectiveDetector(): Module {
         details: Extract<ObjectiveDetails, { kind: 'find-file' }>,
     ): void {
         const unsub = events.on('fs:read', (event) => {
-            if (event.machine === details.machine && event.path === details.path) {
+            // Match on worldMachine (WorldSpec machine ID) or hostname fallback
+            const machineMatch = event.worldMachine === details.machine || event.machine === details.machine;
+            if (machineMatch && event.path === details.path) {
                 completeObjective(tracker, events);
             }
         });
@@ -163,13 +166,31 @@ export function createObjectiveDetector(): Module {
         tracker: ObjectiveTracker,
         events: EventBus,
         details: Extract<ObjectiveDetails, { kind: 'credential-find' }>,
+        credentials: readonly CredentialEntry[],
     ): void {
-        const unsub = events.on('auth:credential-found', (event) => {
+        // Listen for explicit credential-found events
+        const unsub1 = events.on('auth:credential-found', (event) => {
             if (event.credentialId === details.credentialId) {
                 completeObjective(tracker, events);
             }
         });
-        tracker.unsubscribers.push(unsub);
+        tracker.unsubscribers.push(unsub1);
+
+        // Also detect credential discovery via file reads:
+        // If the player reads the file where the credential is stored,
+        // that counts as finding the credential.
+        const cred = credentials.find(c => c.id === details.credentialId);
+        if (cred?.foundAt.path !== undefined) {
+            const credMachine = cred.foundAt.machine;
+            const credPath = cred.foundAt.path;
+            const unsub2 = events.on('fs:read', (event) => {
+                const machineMatch = event.worldMachine === credMachine || event.machine === credMachine;
+                if (machineMatch && event.path === credPath) {
+                    completeObjective(tracker, events);
+                }
+            });
+            tracker.unsubscribers.push(unsub2);
+        }
     }
 
     function setupEscalateTracker(
@@ -178,7 +199,8 @@ export function createObjectiveDetector(): Module {
         details: Extract<ObjectiveDetails, { kind: 'escalate' }>,
     ): void {
         const unsub = events.on('auth:escalate', (event) => {
-            if (event.machine === details.machine && event.to === details.toUser) {
+            const machineMatch = event.worldMachine === details.machine || event.machine === details.machine;
+            if (machineMatch && event.to === details.toUser) {
                 completeObjective(tracker, events);
             }
         });
@@ -298,9 +320,10 @@ export function createObjectiveDetector(): Module {
 
         init(context: SimulationContext): void {
             trackers = [];
+            const credentials = context.world.credentials;
 
             for (const objective of context.world.objectives) {
-                const tracker = setupTracker(objective, context.events);
+                const tracker = setupTracker(objective, context.events, credentials);
                 trackers.push(tracker);
             }
         },
